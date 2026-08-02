@@ -50,7 +50,7 @@ npm test            # 38 unit + API tests
 npm run icons       # regenerate the PWA icons
 ```
 
-Browser end-to-end tests (23 checks, needs Chromium):
+Browser end-to-end tests (24 checks, needs Chromium):
 
 ```bash
 npm install --no-save playwright
