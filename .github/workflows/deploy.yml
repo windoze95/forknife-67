@@ -72,13 +72,19 @@ jobs:
           install -m 600 /dev/null ~/.ssh/forknife67_deploy
           printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/forknife67_deploy
 
-      # Pin the host key when DEPLOY_KNOWN_HOSTS is set; otherwise deploy.sh
-      # falls back to trust-on-first-use.
+      # The `secrets` context is not available in `if:` at either job or step
+      # level, so the presence check has to happen inside the script.
       - name: Pin the droplet host key
-        if: ${{ secrets.DEPLOY_KNOWN_HOSTS != '' }}
         env:
           DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts_forknife
+        run: |
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts_forknife
+            chmod 600 ~/.ssh/known_hosts_forknife
+            echo "host key pinned"
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set — trusting the droplet host key on first use. Set it with: ssh-keyscan <droplet-ip>"
+          fi
 
       - name: Deploy
         env:
