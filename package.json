@@ -1,0 +1,17 @@
+{
+  "name": "forknife-67",
+  "version": "1.0.0",
+  "description": "Sprite tracker for Fortnite - know instantly whether you already have a sprite.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "PORT=8080 node server/server.js",
+    "test": "node --test 'test/**/*.test.js'",
+    "icons": "node tools/make-icons.js"
+  },
+  "dependencies": {}
+}

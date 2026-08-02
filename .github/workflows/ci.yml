@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit and API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # The app has no runtime dependencies, so there is nothing to install.
+      - name: Run tests
+        run: npm test
+
+      - name: Check icons are up to date
+        run: |
+          npm run icons
+          git diff --exit-code -- public/icons \
+            || { echo "::error::public/icons is stale — run 'npm run icons' and commit"; exit 1; }
+
+  browser:
+    name: Browser end-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # playwright is a test-only tool and deliberately not a dependency of the
+      # app, so it is installed here rather than committed to package.json.
+      - name: Install Playwright
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Run browser smoke test
+        run: node test/browser-smoke.mjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: /tmp/forknife-shots
+          if-no-files-found: ignore
+
+  shellcheck:
+    name: Deploy script lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check deploy.sh
+        run: bash -n deploy/deploy.sh
+
+      - name: Validate cloud-init YAML
+        run: python3 -c "import yaml; yaml.safe_load(open('deploy/cloud-init.yaml'))"
+
+      - name: ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: ./deploy
+          severity: warning

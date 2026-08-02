@@ -1,0 +1,113 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'app = ship code only; full = also reconcile droplet, DNS and TLS'
+        type: choice
+        options: [app, full]
+        default: app
+
+# Two deploys rsyncing the same droplet at once would race. Queue instead, and
+# never cancel one midway — a half-shipped app directory is worse than waiting.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Merging to main must never ship something the test suite rejects.
+  test:
+    name: Test before deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+
+  # Job-level `if:` cannot read secrets, so presence is resolved here and
+  # passed down as an output. Without this, every merge would show a red X
+  # until the secrets are configured.
+  preflight:
+    name: Check deploy secrets
+    runs-on: ubuntu-latest
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          DO_TOKEN: ${{ secrets.DO_TOKEN }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -n "$DO_TOKEN" ] && [ -n "$DEPLOY_SSH_KEY" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Deploy skipped — add the DO_TOKEN and DEPLOY_SSH_KEY repository secrets to enable it. See deploy/DEPLOY.md."
+          fi
+
+  deploy:
+    name: Deploy to production
+    needs: [test, preflight]
+    if: needs.preflight.outputs.configured == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://forknife67.com
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the deploy key
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          install -m 600 /dev/null ~/.ssh/forknife67_deploy
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/forknife67_deploy
+
+      # The `secrets` context is not available in `if:` at either job or step
+      # level, so the presence check has to happen inside the script.
+      - name: Pin the droplet host key
+        env:
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
+            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts_forknife
+            chmod 600 ~/.ssh/known_hosts_forknife
+            echo "host key pinned"
+          else
+            echo "::warning::DEPLOY_KNOWN_HOSTS is not set — trusting the droplet host key on first use. Set it with: ssh-keyscan <droplet-ip>"
+          fi
+
+      - name: Deploy
+        env:
+          DO_TOKEN: ${{ secrets.DO_TOKEN }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
+          DOMAIN: ${{ vars.DOMAIN || 'forknife67.com' }}
+          SSH_KEY: /home/runner/.ssh/forknife67_deploy
+          # A push to main ships code only. Reconciling DNS and TLS on every
+          # merge is needless risk; run the workflow manually in "full" mode
+          # when the infrastructure itself needs to change.
+          APP_ONLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') && '0' || '1' }}
+        run: ./deploy/deploy.sh
+
+      - name: Confirm the site is serving the new build
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -fsS --max-time 20 "https://${{ vars.DOMAIN || 'forknife67.com' }}/api/health" | grep -q '"ok":true'; then
+              echo "health check passed"
+              exit 0
+            fi
+            echo "attempt $i failed, retrying…"
+            sleep 10
+          done
+          echo "::error::Site did not return a healthy response after the deploy"
+          exit 1
