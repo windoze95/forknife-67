@@ -6,13 +6,17 @@
 
   "observability": { "enabled": true },
 
-  // Uncomment once forknife67.com is an Active zone on this Cloudflare account.
-  // `custom_domain` creates the DNS record and the certificate on deploy; until
-  // the zone exists it would fail, so it ships commented out.
-  // "routes": [
-  //   { "pattern": "forknife67.com", "custom_domain": true },
-  //   { "pattern": "www.forknife67.com", "custom_domain": true }
-  // ],
+  // Adding `routes` silently disables the workers.dev URL unless this is set,
+  // which would take the app offline for however long DNS delegation takes.
+  // It also stays useful afterwards: a hostname that works even if something
+  // is wrong with the domain.
+  "workers_dev": true,
+
+  // `custom_domain` creates the DNS record and the certificate on deploy.
+  "routes": [
+    { "pattern": "forknife67.com", "custom_domain": true },
+    { "pattern": "www.forknife67.com", "custom_domain": true }
+  ],
 
   "assets": {
     "directory": "./public",
