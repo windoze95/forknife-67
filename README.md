@@ -62,6 +62,10 @@ Both suites plus a shellcheck pass over `deploy/` run in CI on every push.
 
 ## Deploying
 
+**Picking this up for the first time?** [`HANDOFF.md`](HANDOFF.md) is the
+linear start-to-finish list: try it locally, create the tokens, point the
+domain, deploy, verify.
+
 See [`deploy/DEPLOY.md`](deploy/DEPLOY.md). One script puts it on the cheapest
 DigitalOcean droplet behind Cloudflare with TLS:
 
