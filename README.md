@@ -50,11 +50,15 @@ npm test            # 38 unit + API tests
 npm run icons       # regenerate the PWA icons
 ```
 
-Browser end-to-end tests (needs Chromium):
+Browser end-to-end tests (23 checks, needs Chromium):
 
 ```bash
-CHROME_PATH=/path/to/chrome node test/browser-smoke.mjs
+npm install --no-save playwright
+npx playwright install chromium
+node test/browser-smoke.mjs
 ```
+
+Both suites plus a shellcheck pass over `deploy/` run in CI on every push.
 
 ## Deploying
 

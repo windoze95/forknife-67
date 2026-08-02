@@ -1,19 +1,25 @@
 /**
  * End-to-end smoke test against a real browser.
  *
- * Kept out of `npm test` because it needs Chromium; run it with
+ * Kept out of `npm test` because it needs Chromium and playwright, neither of
+ * which the app itself depends on. It boots its own server on a random port:
+ *
+ *   npm install --no-save playwright
+ *   npx playwright install chromium
  *   node test/browser-smoke.mjs
- * after `npm start`, or let it boot its own server (the default).
  *
  * It exercises the interactions the unit tests cannot reach: tap-to-cycle,
  * the hunting flag, filters, search, the detail sheet, undo, and two devices
  * converging through the sync API.
  */
 
-import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+
+// Resolve playwright from node_modules by default; PLAYWRIGHT_MODULE lets a
+// machine with only a global install point at it instead.
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 
 const SHOT_DIR = process.env.SHOT_DIR || path.join(os.tmpdir(), 'forknife-shots');
 

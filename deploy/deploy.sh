@@ -250,6 +250,10 @@ log "Issuing the TLS certificate (DNS-01 via Cloudflare)"
 
 # DNS-01 rather than HTTP-01: it works regardless of proxy state and does not
 # depend on the A record having propagated yet.
+# The token is a local variable, so this heredoc must expand on THIS machine
+# and be piped over — a quoted delimiter would ship the literal string.
+# The file is created 0600 before anything is written into it.
+# shellcheck disable=SC2087
 ssh "${SSH_OPTS[@]}" "root@$ip" "install -m 600 /dev/null /root/.cloudflare.ini && cat > /root/.cloudflare.ini" <<EOF
 dns_cloudflare_api_token = $CF_API_TOKEN
 EOF
