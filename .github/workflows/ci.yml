@@ -74,21 +74,3 @@ jobs:
           name: screenshots
           path: /tmp/forknife-shots
           if-no-files-found: ignore
-
-  shellcheck:
-    name: Deploy script lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Syntax-check deploy.sh
-        run: bash -n deploy/deploy.sh
-
-      - name: Validate cloud-init YAML
-        run: python3 -c "import yaml; yaml.safe_load(open('deploy/cloud-init.yaml'))"
-
-      - name: ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: ./deploy
-          severity: warning

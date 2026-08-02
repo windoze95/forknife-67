@@ -109,9 +109,4 @@ Object per vault; SQLite-backed objects support point-in-time recovery.
 - **The total.** **Menu → Total to find** when Epic adds more. Existing marks
   are kept, and the change syncs across devices.
 
-`deploy/` still holds the original DigitalOcean droplet path, driving
-`server/server.js` instead of the Worker. It is unused — kept only if you ever
-want the app on your own box. Deleting `deploy/` and the shellcheck job in
-`.github/workflows/ci.yml` would cost nothing.
-
 How the app is built is in [`README.md`](README.md).

@@ -1,9 +1,15 @@
 /**
  * forknife-67 server.
  *
- * Zero runtime dependencies on purpose: this runs on the cheapest DigitalOcean
- * droplet (512 MB), so there is no npm install step to fail and nothing to
- * patch on a schedule beyond Node itself.
+ * Production runs on Cloudflare Workers (see src/worker.js). This is the same
+ * API on plain Node, for three things the Worker cannot do: `npm start` with
+ * nothing installed, reaching the app over your LAN, and self-hosting it on
+ * your own box without Cloudflare in the picture.
+ *
+ * Zero runtime dependencies on purpose, so there is no npm install step to fail
+ * and nothing to patch on a schedule beyond Node itself. It is held to the same
+ * externally visible contract as the Worker by test/server.test.js and
+ * test/worker/api.test.js, so the two cannot quietly drift apart.
  *
  * Responsibilities:
  *   1. Serve the static PWA out of ../public
@@ -76,7 +82,7 @@ async function readVault(code) {
 }
 
 /**
- * Atomic write: a droplet losing power mid-write leaves either the old file or
+ * Atomic write: a machine losing power mid-write leaves either the old file or
  * the new one, never a half-written vault.
  */
 async function writeVault(code, doc) {
@@ -113,7 +119,7 @@ function withVaultLock(code, task) {
 const rateBuckets = new Map();
 
 function clientIp(req) {
-  // Only trust the proxy header when we are actually behind our own nginx.
+  // Only trust the proxy header when we are actually behind our own proxy.
   const forwarded = req.headers['x-forwarded-for'];
   if (process.env.TRUST_PROXY === '1' && typeof forwarded === 'string') {
     return forwarded.split(',')[0].trim();

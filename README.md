@@ -94,15 +94,8 @@ There is no server to patch, no certificate to renew, and no bill. The free
 plan allows 100,000 Worker requests and 100,000 Durable Object requests per
 day; a personal tracker uses a rounding error of that.
 
-<details>
-<summary>Self-hosting on a droplet instead</summary>
-
-`deploy/` still holds the original DigitalOcean path — one script for a $4/mo
-droplet with nginx, Let's Encrypt and Cloudflare DNS, driving `server/server.js`
-rather than the Worker. See [`deploy/DEPLOY.md`](deploy/DEPLOY.md). It is kept
-for anyone who wants the app on their own box; the Worker is what's deployed.
-
-</details>
+To host it yourself instead, `server/server.js` is a complete standalone
+server — `npm start` behind any reverse proxy, no Cloudflare involved.
 
 ## How it's built
 
@@ -120,7 +113,6 @@ src/
   worker.js           the deployed sync API
   vault-object.js     one Durable Object per vault
 server/server.js      the same API on plain Node, for local and LAN use
-deploy/               optional droplet path (nginx, TLS, DNS)
 test/                 unit, API, Worker and browser tests
 ```
 

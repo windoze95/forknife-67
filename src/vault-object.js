@@ -7,7 +7,7 @@
  *      two devices syncing at the same instant would otherwise lose one side's
  *      edits. A Durable Object is single-threaded and there is exactly one
  *      instance per vault, so the lock *is* the object.
- *   2. Atomic writes via write-to-tmp-then-rename, because a droplet losing
+ *   2. Atomic writes via write-to-tmp-then-rename, because a machine losing
  *      power mid-write could leave a half-written vault. SQLite gives us that.
  *
  * Storage is SQL rather than the key-value API on purpose: a vault is capped by

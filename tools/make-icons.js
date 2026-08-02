@@ -1,10 +1,10 @@
 /**
  * Generates the PWA icon set with no image dependencies.
  *
- * A build step that needs sharp/canvas is a build step that breaks on a 512 MB
- * droplet, so the icons are rasterised here with a ~100 line scanline filler
- * and encoded as PNG using Node's built-in zlib. Run `npm run icons` after
- * changing the artwork; the output is committed.
+ * A build step that needs sharp/canvas is a native dependency that breaks on
+ * some machine eventually, so the icons are rasterised here with a ~100 line
+ * scanline filler and encoded as PNG using Node's built-in zlib. Run
+ * `npm run icons` after changing the artwork; the output is committed.
  */
 
 import fs from 'node:fs';
