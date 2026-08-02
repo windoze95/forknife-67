@@ -64,38 +64,67 @@ before(async () => {
   const port = await freePort();
   base = `http://127.0.0.1:${port}`;
 
+  // Run the wrangler binary directly rather than through `npx`, and in its own
+  // process group. wrangler spawns workerd as a grandchild: signalling only the
+  // process we hold leaves workerd alive, and its still-open stdio pipes keep
+  // this test process from ever exiting. Killing the group is what makes
+  // teardown reliable — macOS tolerated the sloppier version, Linux did not.
+  const wrangler = path.join(REPO_ROOT, 'node_modules', '.bin', 'wrangler');
+
   child = spawn(
-    'npx',
-    ['wrangler', 'dev', '--port', String(port), '--inspector-port', '0', '--log-level', 'warn'],
-    { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '1' } },
+    wrangler,
+    ['dev', '--port', String(port), '--inspector-port', '0', '--log-level', 'warn'],
+    {
+      cwd: REPO_ROOT,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      detached: true,
+      env: { ...process.env, CI: '1', WRANGLER_SEND_METRICS: 'false' },
+    },
   );
 
   const output = [];
   child.stdout.on('data', (c) => output.push(c.toString()));
   child.stderr.on('data', (c) => output.push(c.toString()));
+  child.on('error', (err) => output.push(`spawn failed: ${err.message}`));
 
   try {
     await waitForHealth(base);
   } catch (err) {
-    throw new Error(`${err.message}\n\nwrangler output:\n${output.join('')}`);
+    await stopWrangler();
+    throw new Error(`${err.message}\n\nwrangler output:\n${output.join('') || '(none)'}`);
   }
 });
 
-after(async () => {
-  if (!child) return;
-  child.kill('SIGTERM');
-  // Do not let a wedged workerd keep the test process alive forever.
-  await new Promise((resolve) => {
-    const forceKill = setTimeout(() => {
-      child.kill('SIGKILL');
-      resolve();
-    }, 5000);
-    child.on('exit', () => {
-      clearTimeout(forceKill);
-      resolve();
-    });
-  });
-});
+/** Kill the whole wrangler process group, workerd included. */
+async function stopWrangler() {
+  if (!child || child.exitCode !== null) return;
+
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  try {
+    process.kill(-child.pid, 'SIGTERM');
+  } catch {
+    // Already gone, or never started.
+    return;
+  }
+
+  const timer = setTimeout(() => {
+    try {
+      process.kill(-child.pid, 'SIGKILL');
+    } catch {
+      // Nothing left to kill.
+    }
+  }, 5000);
+
+  await exited;
+  clearTimeout(timer);
+
+  // Nothing should be holding the event loop open once the group is gone, but
+  // an unread pipe would do exactly that.
+  child.stdout?.destroy();
+  child.stderr?.destroy();
+}
+
+after(stopWrangler);
 
 const CODE_A = 'ABCDEFGH12345678';
 const CODE_B = 'ZYXWVTSR98765432';
