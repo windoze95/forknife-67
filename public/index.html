@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>forknife 67 — Sprite Tracker</title>
+<meta name="description" content="Track which Fortnite sprites you already have, which are maxed, and which you're still hunting.">
+<meta name="theme-color" content="#0d1020">
+<meta name="color-scheme" content="dark light">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<!-- Icon definitions, referenced with <use> throughout the app. -->
+<svg class="svg-defs" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-crown" viewBox="0 0 24 24">
+      <path d="M3 8.5 6.6 12 12 4.5 17.4 12 21 8.5 19.3 19H4.7L3 8.5Z" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="M5 12.5 10 17.5 19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-target" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="2"/>
+      <circle cx="12" cy="12" r="3.2" fill="currentColor"/>
+    </symbol>
+    <symbol id="i-search" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/>
+      <path d="m15.5 15.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24">
+      <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24">
+      <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="i-cloud" viewBox="0 0 24 24">
+      <path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16.5 9.2 3.9 3.9 0 0 1 17.5 18H7Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
+    </symbol>
+  </defs>
+</svg>
+
+<header class="topbar">
+  <div class="topbar-main">
+    <h1 class="brand">
+      <span class="brand-mark" aria-hidden="true"><svg><use href="#i-crown"/></svg></span>
+      <span class="brand-text">forknife<span class="brand-num">67</span></span>
+    </h1>
+
+    <div class="topbar-actions">
+      <button type="button" class="icon-btn" id="syncBtn" data-state="off" title="Cloud sync" aria-label="Cloud sync">
+        <svg aria-hidden="true"><use href="#i-cloud"/></svg>
+      </button>
+      <button type="button" class="icon-btn" id="menuBtn" aria-label="Open menu" aria-haspopup="dialog">
+        <svg aria-hidden="true"><use href="#i-menu"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="progress">
+    <div class="progress-head">
+      <strong id="progressCount">0 / 111</strong>
+      <span class="progress-sub" id="progressSub">collected</span>
+      <span class="spacer"></span>
+      <span class="progress-pct" id="progressPct">0%</span>
+    </div>
+    <div class="bar" role="progressbar" aria-labelledby="progressCount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="progressBar">
+      <span class="bar-fill bar-maxed" id="barMaxed"></span>
+      <span class="bar-fill bar-owned" id="barOwned"></span>
+    </div>
+    <div class="legend">
+      <button type="button" class="legend-item" data-jump="maxed">
+        <i class="dot dot-maxed"></i><span id="legendMaxed">0</span> maxed
+      </button>
+      <button type="button" class="legend-item" data-jump="owned">
+        <i class="dot dot-owned"></i><span id="legendOwned">0</span> owned
+      </button>
+      <button type="button" class="legend-item" data-jump="hunting">
+        <i class="dot dot-hunting"></i><span id="legendHunting">0</span> hunting
+      </button>
+      <button type="button" class="legend-item" data-jump="needed">
+        <i class="dot dot-needed"></i><span id="legendNeeded">111</span> to find
+      </button>
+    </div>
+  </div>
+</header>
+
+<!-- Zero-height probe: when it scrolls out of view the toolbar is stuck. -->
+<div id="stickySentinel" aria-hidden="true"></div>
+
+<div class="toolbar" id="toolbar">
+  <div class="search">
+    <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+    <input type="search" id="search" placeholder="Search number or name…" autocomplete="off"
+           spellcheck="false" enterkeyhint="search" aria-label="Search sprites">
+    <button type="button" class="search-clear" id="searchClear" hidden aria-label="Clear search">
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </div>
+
+  <div class="filters" role="group" aria-label="Filter sprites">
+    <button type="button" class="chip is-active" data-filter="all">All</button>
+    <button type="button" class="chip" data-filter="needed">Needed</button>
+    <button type="button" class="chip" data-filter="hunting">Hunting</button>
+    <button type="button" class="chip" data-filter="owned">Owned</button>
+    <button type="button" class="chip" data-filter="maxed">Maxed</button>
+  </div>
+</div>
+
+<main>
+  <p class="result-line" id="resultLine" aria-live="polite"></p>
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty" hidden>Nothing matches that filter.</p>
+
+  <p class="hint">
+    Tap a tile to cycle <b>Needed → Owned → Maxed</b>. Tap the ring to flag one you're hunting.
+    Long-press (or the <b>i</b> button) for names and notes.
+  </p>
+</main>
+
+<!-- Sprite detail -->
+<dialog class="sheet" id="detail" aria-labelledby="detailTitle">
+  <form method="dialog" class="sheet-inner">
+    <div class="sheet-head">
+      <h2 id="detailTitle">Sprite</h2>
+      <button type="submit" class="icon-btn" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+
+    <div class="status-picker" role="radiogroup" aria-label="Status">
+      <button type="button" class="status-opt" data-status="needed" role="radio" aria-checked="false">
+        <svg aria-hidden="true"><use href="#i-target"/></svg>
+        <b>Needed</b><small>Not in my inventory</small>
+      </button>
+      <button type="button" class="status-opt" data-status="owned" role="radio" aria-checked="false">
+        <svg aria-hidden="true"><use href="#i-check"/></svg>
+        <b>Owned</b><small>Have it, no crown in game</small>
+      </button>
+      <button type="button" class="status-opt" data-status="maxed" role="radio" aria-checked="false">
+        <svg aria-hidden="true"><use href="#i-crown"/></svg>
+        <b>Maxed</b><small>Crowned in game</small>
+      </button>
+    </div>
+
+    <label class="switch">
+      <input type="checkbox" id="detailHunting">
+      <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+      <span class="switch-label">On my hunting list</span>
+    </label>
+
+    <label class="field">
+      <span class="field-label">Name <small>(optional)</small></span>
+      <input type="text" id="detailName" maxlength="60" placeholder="e.g. the little blue one" autocomplete="off">
+    </label>
+
+    <label class="field">
+      <span class="field-label">Notes <small>(where you saw it, level, trade)</small></span>
+      <textarea id="detailNotes" maxlength="500" rows="3" placeholder="Found near Ranger's Ruin, level 3…"></textarea>
+    </label>
+
+    <div class="sheet-nav">
+      <button type="button" class="btn ghost" id="detailPrev">‹ Prev</button>
+      <span class="sheet-updated" id="detailUpdated"></span>
+      <button type="button" class="btn ghost" id="detailNext">Next ›</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Menu / settings -->
+<dialog class="sheet" id="menu" aria-labelledby="menuTitle">
+  <div class="sheet-inner">
+    <div class="sheet-head">
+      <h2 id="menuTitle">Menu</h2>
+      <button type="button" class="icon-btn" data-close-menu aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
+    </div>
+
+    <section class="panel callout">
+      <h3>How this works</h3>
+      <p>
+        In game you can only tell a sprite is already yours when it's <b>maxed</b> —
+        that's the one wearing a crown. Everything you own <i>below</i> max looks
+        identical to one you've never found, so this list is your only record.
+      </p>
+      <p>Mark a sprite the moment you extract it and the guessing stops.</p>
+    </section>
+
+    <section class="panel">
+      <h3>Sprites in game</h3>
+      <label class="field row">
+        <span class="field-label">Total to find</span>
+        <input type="number" id="totalInput" min="1" max="2000" step="1" inputmode="numeric">
+      </label>
+      <p class="muted">Epic adds more over time — bump this and new slots appear. Nothing you've already tracked is lost.</p>
+    </section>
+
+    <section class="panel">
+      <h3><svg class="inline-icon" aria-hidden="true"><use href="#i-cloud"/></svg> Cloud sync <span class="tag" id="syncTag">Off</span></h3>
+      <p class="muted">Optional. Use one vault code on every device to keep phone and PC in step. No account, no email.</p>
+
+      <div class="code-row">
+        <input type="text" id="codeInput" class="code-input" placeholder="XXXX-XXXX-XXXX-XXXX"
+               autocomplete="off" spellcheck="false" autocapitalize="characters" aria-label="Vault code">
+        <button type="button" class="btn" id="codeConnect">Connect</button>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn primary" id="codeCreate">Create new vault</button>
+        <button type="button" class="btn" id="syncNow">Sync now</button>
+        <button type="button" class="btn danger-ghost" id="codeDisconnect">Disconnect</button>
+      </div>
+      <p class="muted" id="syncStatus">Not connected. Your data is saved on this device only.</p>
+      <p class="muted warn">Anyone with your vault code can read and change your list. Treat it like a password.</p>
+    </section>
+
+    <section class="panel">
+      <h3>Names</h3>
+      <p class="muted">Paste a list of sprite names — one per line, in order — to label every slot at once.</p>
+      <textarea id="bulkNames" rows="4" placeholder="Ember&#10;Glimmer&#10;Thistle&#10;…"></textarea>
+      <div class="btn-row">
+        <button type="button" class="btn" id="bulkApply">Apply names</button>
+        <button type="button" class="btn ghost" id="bulkLoad">Load current</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h3>Backup</h3>
+      <div class="btn-row">
+        <button type="button" class="btn" id="exportBtn">Export file</button>
+        <button type="button" class="btn" id="importBtn">Import file</button>
+        <input type="file" id="importInput" accept="application/json,.json" hidden>
+      </div>
+      <p class="muted">Import merges with what's here — the newer edit of each sprite wins.</p>
+    </section>
+
+    <section class="panel">
+      <h3>Appearance</h3>
+      <div class="btn-row" role="group" aria-label="Theme">
+        <button type="button" class="btn theme-opt" data-theme-set="dark">Dark</button>
+        <button type="button" class="btn theme-opt" data-theme-set="light">Light</button>
+        <button type="button" class="btn theme-opt" data-theme-set="system">System</button>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="compactToggle">
+        <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+        <span class="switch-label">Compact grid (more per screen)</span>
+      </label>
+    </section>
+
+    <section class="panel">
+      <h3>Danger zone</h3>
+      <div class="btn-row">
+        <button type="button" class="btn danger-ghost" id="resetStatuses">Reset all statuses</button>
+        <button type="button" class="btn danger-ghost" id="resetAll">Erase everything</button>
+      </div>
+      <p class="muted">Only affects this device unless you sync afterwards.</p>
+    </section>
+
+    <p class="version" id="version"></p>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" aria-live="polite" hidden>
+  <span id="toastText"></span>
+  <button type="button" class="toast-undo" id="toastUndo" hidden>Undo</button>
+</div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
