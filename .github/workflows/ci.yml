@@ -29,6 +29,24 @@ jobs:
           git diff --exit-code -- public/icons \
             || { echo "::error::public/icons is stale — run 'npm run icons' and commit"; exit 1; }
 
+  worker:
+    name: Worker contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Boots the real workerd via `wrangler dev`, so this is the job that
+      # catches the Node server and the deployed Worker drifting apart.
+      - name: Install wrangler
+        run: npm ci
+
+      - name: Run Worker tests
+        run: npm run test:worker
+
   browser:
     name: Browser end-to-end
     runs-on: ubuntu-latest

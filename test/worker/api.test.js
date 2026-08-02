@@ -1,28 +1,100 @@
+/**
+ * Contract tests for the Cloudflare Worker, run against a real `wrangler dev`.
+ *
+ * Kept out of `npm test` because it boots workerd, which the app itself does
+ * not depend on:
+ *
+ *   npm run test:worker
+ *
+ * The overlap with test/server.test.js is deliberate. Both suites assert the
+ * same externally visible contract against two different runtimes, so the Node
+ * dev server and the deployed Worker cannot quietly drift apart. What is *not*
+ * duplicated is anything filesystem-shaped — path traversal, on-disk
+ * filenames, corrupted files — because none of it exists on Workers.
+ */
+
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
+import { spawn } from 'node:child_process';
 import net from 'node:net';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-let server;
-let base;
-let dataDir;
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+
+let child;
+let base = process.env.BASE_URL || '';
+
+/** Ask the OS for a port, then let go of it, so wrangler can bind it. */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const probe = net.createServer();
+    probe.on('error', reject);
+    probe.listen(0, '127.0.0.1', () => {
+      const { port } = probe.address();
+      probe.close(() => resolve(port));
+    });
+  });
+}
+
+async function waitForHealth(url, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const res = await fetch(`${url}/api/health`);
+      if (res.ok) return;
+    } catch {
+      // wrangler is still starting; workerd has not bound the port yet.
+    }
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  throw new Error(`wrangler dev never became healthy at ${url}`);
+}
 
 before(async () => {
-  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'forknife-test-'));
-  process.env.DATA_DIR = dataDir;
+  // BASE_URL points the suite at an already-running instance — a `wrangler dev`
+  // you started yourself, or a real deployment.
+  if (base) {
+    await waitForHealth(base);
+    return;
+  }
 
-  const { createServer } = await import('../server/server.js');
-  server = createServer();
+  const port = await freePort();
+  base = `http://127.0.0.1:${port}`;
 
-  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-  base = `http://127.0.0.1:${server.address().port}`;
+  child = spawn(
+    'npx',
+    ['wrangler', 'dev', '--port', String(port), '--inspector-port', '0', '--log-level', 'warn'],
+    { cwd: REPO_ROOT, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, CI: '1' } },
+  );
+
+  const output = [];
+  child.stdout.on('data', (c) => output.push(c.toString()));
+  child.stderr.on('data', (c) => output.push(c.toString()));
+
+  try {
+    await waitForHealth(base);
+  } catch (err) {
+    throw new Error(`${err.message}\n\nwrangler output:\n${output.join('')}`);
+  }
 });
 
 after(async () => {
-  await new Promise((resolve) => server.close(resolve));
-  await fs.rm(dataDir, { recursive: true, force: true });
+  if (!child) return;
+  child.kill('SIGTERM');
+  // Do not let a wedged workerd keep the test process alive forever.
+  await new Promise((resolve) => {
+    const forceKill = setTimeout(() => {
+      child.kill('SIGKILL');
+      resolve();
+    }, 5000);
+    child.on('exit', () => {
+      clearTimeout(forceKill);
+      resolve();
+    });
+  });
 });
 
 const CODE_A = 'ABCDEFGH12345678';
@@ -36,6 +108,8 @@ function put(code, body) {
   });
 }
 
+/* ------------------------------ static side ----------------------------- */
+
 test('health endpoint reports ok', async () => {
   const res = await fetch(`${base}/api/health`);
   assert.equal(res.status, 200);
@@ -46,9 +120,7 @@ test('serves the app shell', async () => {
   const res = await fetch(`${base}/`);
   assert.equal(res.status, 200);
   assert.match(res.headers.get('content-type'), /text\/html/);
-
-  const html = await res.text();
-  assert.match(html, /forknife/i);
+  assert.match(await res.text(), /forknife/i);
 });
 
 test('serves the shared vault module the browser imports', async () => {
@@ -57,22 +129,25 @@ test('serves the shared vault module the browser imports', async () => {
   assert.match(res.headers.get('content-type'), /javascript/);
 });
 
-test('sets hardening headers on static responses', async () => {
+test('_headers restores the hardening the Node server applied in code', async () => {
   const res = await fetch(`${base}/`);
   assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
   assert.equal(res.headers.get('x-frame-options'), 'DENY');
+  assert.equal(res.headers.get('referrer-policy'), 'no-referrer');
   assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
 });
 
 test('never serves the app shell from cache-forever headers', async () => {
-  const res = await fetch(`${base}/`);
-  assert.equal(res.headers.get('cache-control'), 'no-cache');
+  const shell = await fetch(`${base}/`);
+  assert.match(shell.headers.get('cache-control'), /no-cache/);
 
   const sw = await fetch(`${base}/sw.js`);
-  assert.equal(sw.headers.get('cache-control'), 'no-cache', 'a cached SW would freeze deploys');
+  assert.match(sw.headers.get('cache-control'), /no-cache/, 'a cached SW would freeze deploys');
 });
 
-test('_headers is edge configuration, never a served file', async () => {
+test('_headers is configuration, not a public file', async () => {
+  // It lives inside the asset directory, so the thing worth asserting is that
+  // its contents are never served. The SPA fallback answers with the shell.
   const res = await fetch(`${base}/_headers`);
   assert.doesNotMatch(await res.text(), /X-Content-Type-Options/, '_headers was served verbatim');
 });
@@ -86,69 +161,9 @@ test('unknown page paths fall back to the shell, unknown API paths 404', async (
   assert.equal(api.status, 404);
 });
 
-/**
- * fetch() normalises `/../` away before the request leaves the process, so a
- * traversal has to be sent down a raw socket to reach the server at all.
- */
-function rawGet(rawPath) {
-  return new Promise((resolve, reject) => {
-    const socket = net.connect(server.address().port, '127.0.0.1', () => {
-      socket.write(`GET ${rawPath} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`);
-    });
+/* -------------------------------- the API ------------------------------- */
 
-    const chunks = [];
-    socket.on('data', (chunk) => chunks.push(chunk));
-    socket.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
-    socket.on('error', reject);
-    socket.setTimeout(4000, () => {
-      socket.destroy();
-      reject(new Error('timeout'));
-    });
-  });
-}
-
-test('no traversal form ever leaks a file outside public/', async () => {
-  // The property that matters is "nothing outside public/ comes back", not any
-  // particular status. Most of these are normalised by the URL parser into a
-  // harmless in-scope path and land on the SPA shell; only the %2f form still
-  // looks like a traversal by the time the containment check sees it.
-  for (const target of [
-    '/../package.json',
-    '/..%2fpackage.json',
-    '/..%2F..%2Fetc%2Fpasswd',
-    '/lib/../../server/server.js',
-    '/%2e%2e/%2e%2e/etc/passwd',
-    '/....//package.json',
-  ]) {
-    const response = await rawGet(target);
-
-    assert.ok(!response.includes('"forknife-67"'), `${target} leaked package.json`);
-    assert.ok(!response.includes('MAX_BODY_BYTES'), `${target} leaked server source`);
-    assert.ok(!response.includes('root:x:'), `${target} leaked /etc/passwd`);
-    assert.ok(!/^HTTP\/1\.1 5/.test(response), `${target} caused a server error`);
-  }
-});
-
-test('a traversal that survives URL normalisation is refused outright', async () => {
-  // %2f is not decoded during normalisation, so this one reaches the
-  // containment check and must be rejected there.
-  const response = await rawGet('/..%2fpackage.json');
-  assert.match(response, /^HTTP\/1\.1 403/);
-});
-
-test('a malformed percent-escape is a 400, not a crash', async () => {
-  const response = await rawGet('/%zz');
-  assert.match(response, /^HTTP\/1\.1 400/);
-});
-
-test('a traversal that resolves back inside public/ is still served', async () => {
-  // Guards against the containment check being so strict it breaks real URLs.
-  const response = await rawGet('/lib/../styles.css');
-  assert.match(response, /^HTTP\/1\.1 200/);
-  assert.match(response, /--maxed/);
-});
-
-test('rejects malformed vault codes without touching disk', async () => {
+test('rejects malformed vault codes', async () => {
   for (const code of ['short', '../etc/passwd', 'abcdefgh12345678', 'A'.repeat(40)]) {
     const res = await fetch(`${base}/api/vault/${encodeURIComponent(code)}`);
     assert.equal(res.status, 400, `expected 400 for ${code}`);
@@ -173,13 +188,13 @@ test('PUT stores a vault and GET returns it', async () => {
   assert.equal(stored.sprites[14].name, 'blue one');
 });
 
-test('the raw vault code is never used as a filename', async () => {
-  const files = await fs.readdir(dataDir);
-  assert.ok(files.length > 0);
-  for (const file of files) {
-    assert.ok(!file.includes(CODE_A), 'the code itself must not appear on disk');
-    assert.match(file, /^[a-f0-9]{64}\.json$/);
-  }
+test('POST is accepted as an alias for PUT', async () => {
+  const res = await fetch(`${base}/api/vault/PSTAAAAA11111111`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ total: 111, sprites: { 3: { id: 3, status: 'owned', updatedAt: 10 } } }),
+  });
+  assert.equal(res.status, 200);
 });
 
 test('two devices editing different sprites both survive a sync', async () => {
@@ -204,6 +219,9 @@ test('a stale device cannot overwrite a newer edit', async () => {
 });
 
 test('concurrent writes to one vault do not lose edits', async () => {
+  // The property the Durable Object exists to provide. On the Node server this
+  // needed an explicit promise-chain lock; here it falls out of there being
+  // exactly one single-threaded instance per vault.
   const code = 'CNCRRNT123456789';
   const writes = [];
 
@@ -217,6 +235,11 @@ test('concurrent writes to one vault do not lose edits', async () => {
   for (let i = 1; i <= 12; i += 1) {
     assert.equal(stored.sprites[i]?.status, 'owned', `sprite ${i} was lost in a concurrent write`);
   }
+});
+
+test('vaults are isolated from one another', async () => {
+  const stored = await (await fetch(`${base}/api/vault/${CODE_A}`)).json();
+  assert.equal(stored.sprites[1], undefined, `${CODE_B}'s edits must not appear in ${CODE_A}`);
 });
 
 test('untouched sprites are stripped before storage', async () => {
@@ -233,6 +256,16 @@ test('untouched sprites are stripped before storage', async () => {
   assert.deepEqual(Object.keys(stored.sprites), ['2']);
 });
 
+test('a raised total adds slots without losing data', async () => {
+  // No I, L, O or U — CODE_ALPHABET leaves out the lookalike glyphs.
+  const code = 'TVTAAAAA11111111';
+  await put(code, { total: 111, sprites: { 7: { id: 7, status: 'owned', updatedAt: 10 } } });
+  const grown = await (await put(code, { total: 150, sprites: {}, totalUpdatedAt: 20 })).json();
+
+  assert.equal(grown.total, 150);
+  assert.equal(grown.sprites[7].status, 'owned');
+});
+
 test('malformed JSON and oversized bodies are refused', async () => {
   const bad = await fetch(`${base}/api/vault/${CODE_A}`, {
     method: 'PUT',
@@ -247,29 +280,15 @@ test('malformed JSON and oversized bodies are refused', async () => {
     body: JSON.stringify({ total: 111, pad: 'x'.repeat(900 * 1024) }),
   }).catch(() => null);
 
-  // The server destroys the socket once the cap is passed, so either a 413 or
-  // a connection reset is a pass — what matters is that it is not accepted.
-  if (huge) assert.notEqual(huge.status, 200);
+  if (huge) assert.equal(huge.status, 413);
 
   const stillThere = await fetch(`${base}/api/vault/${CODE_A}`);
   assert.equal(stillThere.status, 200, 'a bad request must not corrupt the stored vault');
 });
 
-test('a corrupted vault file does not take the endpoint down', async () => {
-  const code = 'CRRPT11111111111';
-  await put(code, { total: 111, sprites: { 9: { id: 9, status: 'owned', updatedAt: 1 } } });
-
-  const files = await fs.readdir(dataDir);
-  const crypto = await import('node:crypto');
-  const hash = crypto.createHash('sha256').update(code, 'utf8').digest('hex');
-  assert.ok(files.includes(`${hash}.json`));
-  await fs.writeFile(path.join(dataDir, `${hash}.json`), '{ truncated');
-
-  const res = await fetch(`${base}/api/vault/${code}`);
-  assert.equal(res.status, 404, 'unreadable vault reads as absent rather than 500');
-
-  const recovered = await put(code, { total: 111, sprites: { 9: { id: 9, status: 'maxed', updatedAt: 2 } } });
-  assert.equal(recovered.status, 200, 'the client copy can heal the vault');
+test('API responses are never cached', async () => {
+  const res = await fetch(`${base}/api/vault/${CODE_A}`);
+  assert.equal(res.headers.get('cache-control'), 'no-store', 'a cached vault would look like data loss');
 });
 
 test('DELETE is not an accepted method on a vault', async () => {

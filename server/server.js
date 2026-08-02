@@ -217,6 +217,15 @@ async function serveStatic(req, res, urlPath) {
   }
 
   const rel = decoded === '/' ? '/index.html' : decoded;
+
+  // `_headers` lives in public/ because that is where Cloudflare reads it from,
+  // but it is configuration for the edge, not a file anyone should be able to
+  // fetch. The Worker never serves it; neither should this.
+  if (path.basename(rel) === '_headers') {
+    sendJson(res, 404, { error: 'not found' });
+    return;
+  }
+
   const target = path.join(PUBLIC_DIR, rel);
 
   // Containment check: rejects ../ traversal and absolute-path tricks.

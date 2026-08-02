@@ -1,11 +1,11 @@
-# Handoff — running the rest locally
+# Handoff — what's live and what's left
 
-Everything is on GitHub. Nothing is deployed. This is the linear list of what
-to do from your own machine.
+The app is **deployed and working**:
 
-- **Branch:** `claude/fortnite-sprite-tracker-occ8em`
-- **PR:** [#1](https://github.com/windoze95/forknife-67/pull/1) — draft, all CI checks green
-- **Head commit:** `dff68ad`
+**<https://forknife67.julian-dice.workers.dev>**
+
+It runs on Cloudflare Workers on the free plan. There is no droplet, no server
+to patch, no certificate to renew and no monthly bill.
 
 ---
 
@@ -13,159 +13,59 @@ to do from your own machine.
 
 | | |
 | --- | --- |
-| App built and tested | ✅ 38 unit/API + 24 browser tests, all green in CI |
-| Pushed to GitHub | ✅ 5 commits, working tree clean |
-| CI (test on every push) | ✅ running and green |
-| Auto-deploy workflow | ✅ written, **inactive until you add secrets** |
-| DigitalOcean droplet | ❌ does not exist |
-| Cloudflare zone / DNS | ❌ not set up |
-| `forknife67.com` | ❌ still on Namecheap's nameservers, untouched |
-| TLS certificate | ❌ not issued |
+| App built and tested | ✅ 39 unit/API + 20 Worker + 24 browser tests |
+| Deployed | ✅ Worker + Durable Object, verified live |
+| TLS | ✅ automatic, nothing to renew |
+| CI (test on every push) | ✅ |
+| Auto-deploy on merge to `main` | ✅ written, **inactive until you add one secret** |
+| `forknife67.com` | ❌ still on Namecheap's nameservers |
+| Custom domain on the Worker | ❌ blocked on the above |
 
-Nothing has been created on any account. No charges have been incurred.
+**Cost: $0/mo** — the free plan allows 100,000 Worker requests and 100,000
+Durable Object requests per day. A personal tracker uses a rounding error of it.
 
-**Why the deploy didn't happen:** the session that built this ran in an
-ephemeral cloud container with no DigitalOcean or Cloudflare credentials and no
-browser to authenticate one. Everything that *could* be done without those
-credentials was done, including dry-running every data-handling step of
-`deploy.sh` against sample API payloads and booting the exact file layout the
-droplet will run.
+### Why it isn't on forknife67.com yet
 
----
-
-## 0. Get the code
-
-```bash
-git clone https://github.com/windoze95/forknife-67.git
-cd forknife-67
-git checkout claude/fortnite-sprite-tracker-occ8em
-```
-
-Needs **Node 22+**. There are no dependencies to install.
+Both steps need a browser session I can't open for you: adding the zone to
+Cloudflare, and repointing the nameservers at Namecheap. Signing in is yours to
+do — everything after it is scripted.
 
 ---
 
-## 1. Try it locally first (2 minutes)
+## 1. Point the domain at Cloudflare
 
-Confirm you like the app before spending $4/mo on a droplet.
-
-```bash
-npm start          # http://localhost:8080
-npm test           # 38 unit + API tests
-```
-
-Open it, tap some tiles, check the flow makes sense. Things to try:
-
-- Tap a tile: **Needed → Owned → Maxed ♛ → Needed**
-- Tap the small circle in a tile's corner to flag it as *hunting*; mark that
-  sprite found and watch it drop off the hunting list by itself
-- Long-press a tile for names and notes
-- **Menu → Names** to paste a whole list of sprite names at once
-- **Menu → Total to find** if the count is not 111 any more
-
-Optional browser suite (downloads Chromium, ~100 MB):
-
-```bash
-npm install --no-save playwright
-npx playwright install chromium
-node test/browser-smoke.mjs
-```
-
-**If you decide not to deploy, you can stop here.** The app is fully usable
-locally, and on your phone over your LAN at `http://<your-ip>:8080`. The server
-is only needed for cross-device sync.
-
----
-
-## 2. Create the two API tokens
-
-**DigitalOcean** → API → Tokens → **Generate New Token**
-- Scopes: **read + write**
-- Copy it now; it is shown once
-
-**Cloudflare** → My Profile → API Tokens → **Create Token** → *Create Custom Token*
-- **Zone → Zone → Read**
-- **Zone → DNS → Edit**
-- **Zone → Zone Settings → Edit**
-- Zone Resources: **Include → Specific zone → forknife67.com**
-
-Zone-scoped, not account-wide: this token gets copied to the droplet so certbot
-can answer the DNS-01 challenge.
-
----
-
-## 3. Add the domain to Cloudflare (browser)
-
-1. Cloudflare dashboard → **Add a site** → `forknife67.com` → **Free** plan
-2. It shows you two nameservers, e.g. `dana.ns.cloudflare.com` and
+1. Sign in at <https://dash.cloudflare.com> → **Add a site** → `forknife67.com`
+   → **Free** plan
+2. Skip the DNS "quick scan"; the custom domain below creates what it needs
+3. It shows two nameservers, e.g. `dana.ns.cloudflare.com` and
    `rob.ns.cloudflare.com`. **Copy both — yours will be different.**
-3. Skip the DNS "quick scan" import; the script creates what it needs
+4. Namecheap → **Domain List** → `forknife67.com` → **Manage** →
+   **Nameservers** → *Custom DNS* → paste both → green checkmark
 
----
+Usually active within 5–30 minutes.
 
-## 4. Repoint the nameservers at Namecheap (browser)
+## 2. Attach it to the Worker
 
-This one can't be scripted — Namecheap's API needs an allowlisted IP plus either
-a $50 balance or 20+ domains.
-
-1. Namecheap → **Domain List** → `forknife67.com` → **Manage**
-2. **Nameservers** → change *Namecheap BasicDNS* to **Custom DNS**
-3. Paste the two Cloudflare nameservers from step 3
-4. Click the green checkmark to save
-
-Usually active within 5–30 minutes. You do **not** have to wait before step 5 —
-the deploy uses a DNS-01 challenge through Cloudflare's API, so it doesn't
-depend on propagation.
-
----
-
-## 5. Deploy
+Once the zone shows **Active** in Cloudflare:
 
 ```bash
-export DO_TOKEN=dop_v1_...
-export CF_API_TOKEN=...
-export ACME_EMAIL=you@example.com
-
-./deploy/deploy.sh
+npx wrangler deploy    # after uncommenting the `routes` block in wrangler.jsonc
 ```
 
-4–6 minutes on a cold droplet. It will:
+Or, without touching the config: Cloudflare dashboard → **Workers & Pages** →
+`forknife67` → **Settings** → **Domains & Routes** → **Add** → *Custom domain*,
+once for `forknife67.com` and once for `www.forknife67.com`. The DNS record and
+certificate are created for you.
 
-1. verify both tokens, and print DigitalOcean's cheapest current droplet size so
-   you can confirm the default (`s-1vcpu-512mb-10gb`, $4/mo) is still it
-2. generate an SSH deploy key at `~/.ssh/forknife67_deploy` and register it
-3. create the droplet, tagged `forknife67`
-4. wait for first boot (Node 22, nginx, certbot, ufw, systemd, unattended-upgrades)
-5. point `forknife67.com` and `www.` at it, proxied
-6. set TLS to **Full (strict)**, force HTTPS, min TLS 1.2
-7. rsync the app and start the service
-8. issue a Let's Encrypt cert via DNS-01, install the TLS nginx config
-9. health-check both the origin directly and through the Cloudflare edge
-
-It's idempotent — safe to re-run at any point if something goes wrong partway.
-
-### If it fails partway
-
-| Message | Cause | Fix |
-| --- | --- | --- |
-| `zone forknife67.com not found` | step 3 not done, or token is on a different account | finish step 3 |
-| `cloud-init did not complete` | first boot still installing | wait a minute, re-run; else `ssh root@$IP tail -50 /var/log/cloud-init-output.log` |
-| cert issuance fails | token missing **DNS → Edit**, or zone not Active yet | fix the token, re-run |
-| `edge not answering yet` | DNS still propagating | not an error — the origin check is what matters |
-| Cloudflare 521/522 | origin down | `ssh root@$IP systemctl status forknife67 nginx` |
-
----
-
-## 6. Check it worked
+## 3. Check it worked
 
 ```bash
-curl https://forknife67.com/api/health          # {"ok":true,...}
-curl -I https://forknife67.com                  # 200, HTTPS
-curl -I https://www.forknife67.com              # 301 -> apex
+curl https://forknife67.com/api/health     # {"ok":true,"runtime":"workers"}
+curl -I https://forknife67.com             # 200, HTTPS
 ```
 
-Then on your phone: open `https://forknife67.com`, **Add to Home Screen**, turn
-on airplane mode and confirm it still opens and still records taps.
+Then on your phone: open it, **Add to Home Screen**, turn on airplane mode and
+confirm it still opens and still records taps.
 
 To test sync: **Menu → Create new vault** on your phone, then enter that code in
 **Menu → Cloud sync** on your PC. Both should converge.
@@ -174,79 +74,44 @@ To test sync: **Menu → Create new vault** on your phone, then enter that code 
 
 ---
 
-## 7. Turn on auto-deploy (optional)
-
-Once the droplet exists, merges to `main` can deploy themselves.
+## 4. Turn on auto-deploy (optional)
 
 **Settings → Secrets and variables → Actions → New repository secret**
 
 | Secret | Value |
 | --- | --- |
-| `DO_TOKEN` | same DigitalOcean token |
-| `DEPLOY_SSH_KEY` | `cat ~/.ssh/forknife67_deploy` — the **private** key, whole file including BEGIN/END lines |
-| `DEPLOY_KNOWN_HOSTS` | `ssh-keyscan <droplet-ip>` — recommended, pins the host key |
-| `CF_API_TOKEN` | only needed for manual `full` runs |
-| `ACME_EMAIL` | only needed for manual `full` runs |
+| `CLOUDFLARE_API_TOKEN` | My Profile → API Tokens → **Edit Cloudflare Workers** template |
+| `CLOUDFLARE_ACCOUNT_ID` | `b2b9862e133f3e805a257d44e4cef752` |
 
-Pushes to `main` then ship code only (rsync + restart) after the tests pass.
-DNS and TLS are deliberately left alone; to reconcile those, use
-**Actions → Deploy → Run workflow → mode: full**.
-
-Until those secrets exist the deploy job skips cleanly, so merging is safe now.
-
----
-
-## 8. Merge the PR
-
-PR #1 is a **draft**. Mark it ready and merge when you're happy. Everything
-above works from the branch, so there's no rush.
+Merges to `main` then run the tests and deploy. Until the secret exists the
+deploy job skips cleanly, so merging is safe now.
 
 ---
 
 ## Living with it
 
 ```bash
-IP=<droplet ip>                                    # printed by every deploy
-ssh -i ~/.ssh/forknife67_deploy root@$IP journalctl -u forknife67 -f   # logs
-ssh -i ~/.ssh/forknife67_deploy root@$IP systemctl restart forknife67  # restart
-DO_TOKEN=... APP_ONLY=1 ./deploy/deploy.sh                             # ship code only
+npm run deploy                      # ship a change
+npx wrangler tail                   # live logs
+npx wrangler deployments list       # what's out there
+npx wrangler rollback               # undo the last deploy
 ```
 
-`dig forknife67.com` returns a *Cloudflare* IP once proxying is on — the real
-droplet IP is printed at the end of each deploy and in the DO panel.
+**Backups.** Every device holds a full copy, and **Menu → Backup → Export file**
+writes a JSON file you can re-import anywhere. Server-side state is one Durable
+Object per vault; SQLite-backed objects support point-in-time recovery.
 
-**Backups.** Server state is only `/var/lib/forknife67`:
-
-```bash
-ssh -i ~/.ssh/forknife67_deploy root@$IP tar czf - /var/lib/forknife67 > vaults-backup.tar.gz
-```
-
-Every device also holds a full copy, and **Menu → Backup → Export file** writes
-a JSON file you can re-import anywhere.
-
-**Cost:** $4.00/mo droplet + $0 Cloudflare + $0 Let's Encrypt + ~$1.20/mo
-amortised domain. Worth setting a billing alert at $10 in DigitalOcean so a
-mistake can't run up a bill quietly.
-
-**Tear down:**
-
-```bash
-curl -X DELETE -H "Authorization: Bearer $DO_TOKEN" \
-  "https://api.digitalocean.com/v2/droplets?tag_name=forknife67"
-```
-
----
-
-## Things you may want to change
+**Things you may want to change**
 
 - **Sprite names.** Slots are numbered 1–111; there's no authoritative name list
   baked in, deliberately. Rename individually, or paste a full list in
   **Menu → Names**.
 - **The total.** **Menu → Total to find** when Epic adds more. Existing marks
   are kept, and the change syncs across devices.
-- **Region.** Defaults to `nyc3`. `REGION=sfo3 ./deploy/deploy.sh` if you're
-  closer to the west coast.
 
-Deeper detail on any of the deploy machinery is in
-[`deploy/DEPLOY.md`](deploy/DEPLOY.md); how the app is built is in
-[`README.md`](README.md).
+`deploy/` still holds the original DigitalOcean droplet path, driving
+`server/server.js` instead of the Worker. It is unused — kept only if you ever
+want the app on your own box. Deleting `deploy/` and the shellcheck job in
+`.github/workflows/ci.yml` would cost nothing.
+
+How the app is built is in [`README.md`](README.md).

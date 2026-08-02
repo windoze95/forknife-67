@@ -1,0 +1,22 @@
+# Consumed by Workers Static Assets; never served as a file itself.
+#
+# These are the headers the Node server applied in code. They have to be
+# restated here because static assets are served at the edge without the Worker
+# script running.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  X-Frame-Options: DENY
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; form-action 'none'; frame-ancestors 'none'; base-uri 'self'
+
+# The shell and the service worker must never be served stale, or a deploy
+# would not reach devices that already installed the app.
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/sw.js
+  Cache-Control: no-cache
