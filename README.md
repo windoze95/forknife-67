@@ -42,12 +42,20 @@ whole list in **Menu → Names** to label all of them at once.
 
 ## Running it locally
 
-Node 22+, no dependencies to install.
+Node 22+. The app itself has no runtime dependencies.
 
 ```bash
-npm start           # http://localhost:8080
-npm test            # 38 unit + API tests
+npm start           # http://localhost:8080 — plain Node, nothing to install
+npm test            # 39 unit + API tests
 npm run icons       # regenerate the PWA icons
+```
+
+To run the thing production actually runs:
+
+```bash
+npm install         # wrangler, the only devDependency
+npm run dev:worker  # the Worker + Durable Object under workerd
+npm run test:worker # 20 contract tests against a real `wrangler dev`
 ```
 
 Browser end-to-end tests (24 checks, needs Chromium):
@@ -58,43 +66,60 @@ npx playwright install chromium
 node test/browser-smoke.mjs
 ```
 
-Both suites plus a shellcheck pass over `deploy/` run in CI on every push.
+`BASE_URL` points that suite at anything already running, which is how the
+Worker gets the same 24 checks rather than a second suite that only rhymes
+with them:
+
+```bash
+npm run dev:worker &
+BASE_URL=http://127.0.0.1:8787 node test/browser-smoke.mjs
+```
+
+All of it runs in CI on every push.
 
 ## Deploying
 
-**Picking this up for the first time?** [`HANDOFF.md`](HANDOFF.md) is the
-linear start-to-finish list: try it locally, create the tokens, point the
-domain, deploy, verify.
-
-See [`deploy/DEPLOY.md`](deploy/DEPLOY.md). One script puts it on the cheapest
-DigitalOcean droplet behind Cloudflare with TLS:
+It runs on **Cloudflare Workers**, on the free plan:
 
 ```bash
-DO_TOKEN=... CF_API_TOKEN=... ACME_EMAIL=... ./deploy/deploy.sh   # full
-DO_TOKEN=... APP_ONLY=1 ./deploy/deploy.sh                        # code only
+npm run deploy
 ```
 
-It's idempotent, so it doubles as the redeploy path. Once the repository
-secrets are set, merges to `main` deploy automatically via
-`.github/workflows/deploy.yml` — tests first, code-only by default, with a
-manual `full` mode for infrastructure changes.
+Static files are served straight from the edge without spending a Worker
+invocation; only `/api/*` runs the script. Once `CLOUDFLARE_API_TOKEN` is set as
+a repository secret, merges to `main` deploy themselves via
+`.github/workflows/deploy.yml` — tests first.
+
+There is no server to patch, no certificate to renew, and no bill. The free
+plan allows 100,000 Worker requests and 100,000 Durable Object requests per
+day; a personal tracker uses a rounding error of that.
+
+To host it yourself instead, `server/server.js` is a complete standalone
+server — `npm start` behind any reverse proxy, no Cloudflare involved.
 
 ## How it's built
 
-No framework, no build step, no database. The whole app is static files plus a
-~350 line Node server, which is why it runs comfortably on a 512 MB droplet.
+No framework, no build step, no database.
 
 ```
 public/
   index.html          app shell
   styles.css          all styling
   app.js              all behaviour
-  lib/vault.js        data model + merge logic (shared with the server)
+  lib/vault.js        data model + merge logic — shared by all three runtimes
   sw.js               offline service worker
-server/server.js      static files + sync API
-deploy/               droplet, nginx, TLS, DNS
-test/                 unit, API and browser tests
+  _headers            security + cache headers for the edge-served assets
+src/
+  worker.js           the deployed sync API
+  vault-object.js     one Durable Object per vault
+server/server.js      the same API on plain Node, for local and LAN use
+test/                 unit, API, Worker and browser tests
 ```
+
+`public/lib/vault.js` is imported by the browser, the Worker and the Node
+server, so none of them can disagree about what a merge means. The two server
+implementations are thin adapters over it, and both are held to the same
+externally visible contract by their test suites.
 
 ### Data model
 
@@ -112,9 +137,11 @@ on your PC keeps both edits — whole-document last-write-wins would silently
 drop one. `public/lib/vault.js` is imported by both the browser and the server,
 so the two can't disagree about what a merge means.
 
-Server-side, a vault is one JSON file named `sha256(code)`, written atomically,
-with writes to the same vault serialised so simultaneous syncs can't clobber
-each other. The code itself is never written to disk or logged.
+Server-side, a vault is one Durable Object addressed by `sha256(code)` — so the
+code itself is never stored or logged — holding the document in SQLite. There is
+exactly one single-threaded instance per vault, which is what stops two devices
+syncing at the same instant from clobbering each other. (The Node server builds
+the same guarantee by hand, with a promise-chain lock and atomic file writes.)
 
 **A vault code is a password.** Anyone who has it can read and change your list.
 

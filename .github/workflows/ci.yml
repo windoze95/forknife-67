@@ -29,6 +29,24 @@ jobs:
           git diff --exit-code -- public/icons \
             || { echo "::error::public/icons is stale — run 'npm run icons' and commit"; exit 1; }
 
+  worker:
+    name: Worker contract tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Boots the real workerd via `wrangler dev`, so this is the job that
+      # catches the Node server and the deployed Worker drifting apart.
+      - name: Install wrangler
+        run: npm ci
+
+      - name: Run Worker tests
+        run: npm run test:worker
+
   browser:
     name: Browser end-to-end
     runs-on: ubuntu-latest
@@ -56,21 +74,3 @@ jobs:
           name: screenshots
           path: /tmp/forknife-shots
           if-no-files-found: ignore
-
-  shellcheck:
-    name: Deploy script lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Syntax-check deploy.sh
-        run: bash -n deploy/deploy.sh
-
-      - name: Validate cloud-init YAML
-        run: python3 -c "import yaml; yaml.safe_load(open('deploy/cloud-init.yaml'))"
-
-      - name: ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          scandir: ./deploy
-          severity: warning

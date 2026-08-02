@@ -41,7 +41,7 @@ let ui = {
   filter: 'all',
   query: '',
   compact: false,
-  theme: 'dark',
+  theme: 'light',
   syncCode: '',
   lastSync: 0,
 };
@@ -320,7 +320,7 @@ function applyTheme() {
   document.documentElement.dataset.theme = resolved;
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute('content', resolved === 'light' ? '#f4f6fd' : '#0b0e1a');
+    ?.setAttribute('content', resolved === 'light' ? '#ffffff' : '#2d1f3b');
 
   for (const btn of document.querySelectorAll('[data-theme-set]')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.themeSet === ui.theme));

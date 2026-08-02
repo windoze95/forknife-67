@@ -49,14 +49,27 @@ function equal(actual, expected, message) {
 
 /* ------------------------------ boot server ----------------------------- */
 
-const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'forknife-e2e-'));
-process.env.DATA_DIR = dataDir;
+// BASE_URL points the whole suite at something already running instead of the
+// Node dev server — `npm run dev:worker`, or a real deployment. That is how the
+// Cloudflare Worker gets the same 24 tests, sync and offline behaviour
+// included, rather than a second suite that only rhymes with this one.
+const external = process.env.BASE_URL;
 
-const { createServer } = await import('../server/server.js');
-const server = createServer();
-await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
-const base = `http://127.0.0.1:${server.address().port}`;
-console.log(`server: ${base}\n`);
+let dataDir;
+let server;
+let base = external;
+
+if (!external) {
+  dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'forknife-e2e-'));
+  process.env.DATA_DIR = dataDir;
+
+  const { createServer } = await import('../server/server.js');
+  server = createServer();
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  base = `http://127.0.0.1:${server.address().port}`;
+}
+
+console.log(`server: ${base}${external ? ' (external)' : ''}\n`);
 
 await fs.mkdir(SHOT_DIR, { recursive: true });
 
@@ -395,8 +408,8 @@ await check('no uncaught console errors during the whole run', () => {
 });
 
 await browser.close();
-await new Promise((resolve) => server.close(resolve));
-await fs.rm(dataDir, { recursive: true, force: true });
+if (server) await new Promise((resolve) => server.close(resolve));
+if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
 
 console.log(`\n${passed} passed, ${failures.length} failed`);
 console.log(`screenshots: ${SHOT_DIR}`);

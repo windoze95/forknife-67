@@ -4,15 +4,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      mode:
-        description: 'app = ship code only; full = also reconcile droplet, DNS and TLS'
-        type: choice
-        options: [app, full]
-        default: app
 
-# Two deploys rsyncing the same droplet at once would race. Queue instead, and
-# never cancel one midway — a half-shipped app directory is worse than waiting.
+# Two deploys uploading assets at once would race for the same version. Queue
+# instead, and never cancel one midway.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -30,27 +24,28 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci
       - run: npm test
+      - run: npm run test:worker
 
   # Job-level `if:` cannot read secrets, so presence is resolved here and
   # passed down as an output. Without this, every merge would show a red X
-  # until the secrets are configured.
+  # until the secret is configured.
   preflight:
-    name: Check deploy secrets
+    name: Check deploy secret
     runs-on: ubuntu-latest
     outputs:
       configured: ${{ steps.check.outputs.configured }}
     steps:
       - id: check
         env:
-          DO_TOKEN: ${{ secrets.DO_TOKEN }}
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          if [ -n "$DO_TOKEN" ] && [ -n "$DEPLOY_SSH_KEY" ]; then
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
             echo "configured=true" >> "$GITHUB_OUTPUT"
           else
             echo "configured=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::Deploy skipped — add the DO_TOKEN and DEPLOY_SSH_KEY repository secrets to enable it. See deploy/DEPLOY.md."
+            echo "::notice::Deploy skipped — add the CLOUDFLARE_API_TOKEN repository secret to enable it. See README.md."
           fi
 
   deploy:
@@ -63,41 +58,16 @@ jobs:
       url: https://forknife67.com
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci
 
-      - name: Install the deploy key
-        env:
-          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
-        run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          install -m 600 /dev/null ~/.ssh/forknife67_deploy
-          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/forknife67_deploy
-
-      # The `secrets` context is not available in `if:` at either job or step
-      # level, so the presence check has to happen inside the script.
-      - name: Pin the droplet host key
-        env:
-          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
-        run: |
-          if [ -n "$DEPLOY_KNOWN_HOSTS" ]; then
-            printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts_forknife
-            chmod 600 ~/.ssh/known_hosts_forknife
-            echo "host key pinned"
-          else
-            echo "::warning::DEPLOY_KNOWN_HOSTS is not set — trusting the droplet host key on first use. Set it with: ssh-keyscan <droplet-ip>"
-          fi
-
-      - name: Deploy
-        env:
-          DO_TOKEN: ${{ secrets.DO_TOKEN }}
-          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
-          ACME_EMAIL: ${{ secrets.ACME_EMAIL }}
-          DOMAIN: ${{ vars.DOMAIN || 'forknife67.com' }}
-          SSH_KEY: /home/runner/.ssh/forknife67_deploy
-          # A push to main ships code only. Reconciling DNS and TLS on every
-          # merge is needless risk; run the workflow manually in "full" mode
-          # when the infrastructure itself needs to change.
-          APP_ONLY: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'full') && '0' || '1' }}
-        run: ./deploy/deploy.sh
+      - name: Deploy the Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Confirm the site is serving the new build
         run: |

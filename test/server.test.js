@@ -72,6 +72,11 @@ test('never serves the app shell from cache-forever headers', async () => {
   assert.equal(sw.headers.get('cache-control'), 'no-cache', 'a cached SW would freeze deploys');
 });
 
+test('_headers is edge configuration, never a served file', async () => {
+  const res = await fetch(`${base}/_headers`);
+  assert.doesNotMatch(await res.text(), /X-Content-Type-Options/, '_headers was served verbatim');
+});
+
 test('unknown page paths fall back to the shell, unknown API paths 404', async () => {
   const page = await fetch(`${base}/some/deep/link`);
   assert.equal(page.status, 200);

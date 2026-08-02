@@ -1,0 +1,39 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "forknife67",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-08-02",
+
+  "observability": { "enabled": true },
+
+  // Adding `routes` silently disables the workers.dev URL unless this is set,
+  // which would take the app offline for however long DNS delegation takes.
+  // It also stays useful afterwards: a hostname that works even if something
+  // is wrong with the domain.
+  "workers_dev": true,
+
+  // `custom_domain` creates the DNS record and the certificate on deploy.
+  "routes": [
+    { "pattern": "forknife67.com", "custom_domain": true },
+    { "pattern": "www.forknife67.com", "custom_domain": true }
+  ],
+
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    // Deep links must boot the shell rather than 404, exactly as the Node
+    // server's static fallback did.
+    "not_found_handling": "single-page-application",
+    // Everything else is served straight from the edge without spending a
+    // Worker invocation on it.
+    "run_worker_first": ["/api/*"]
+  },
+
+  "durable_objects": {
+    "bindings": [{ "name": "VAULT", "class_name": "VaultObject" }]
+  },
+
+  // SQLite-backed: the only storage backend available on the Workers Free
+  // plan, and the one with room for a full-size vault document.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["VaultObject"] }]
+}
