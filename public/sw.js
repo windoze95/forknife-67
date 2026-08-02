@@ -9,7 +9,7 @@
  * activate so a deploy cannot leave a device on stale JS.
  */
 
-const CACHE = 'forknife67-v1.0.0';
+const CACHE = 'forknife67-v1.1.0';
 
 const SHELL = [
   '/',
