@@ -94,6 +94,53 @@ atomically.
 
 ---
 
+## Step 4 — Automatic deploys on merge to main
+
+`.github/workflows/deploy.yml` ships every merge to `main` automatically. It
+runs `npm test` first and refuses to deploy if the suite fails.
+
+A push to main runs in **app-only** mode: it rsyncs the code and restarts the
+service, and does *not* touch DNS, TLS or the droplet itself. Reconciling
+infrastructure on every merge is needless risk. When the infrastructure does
+need to change, run the workflow manually (**Actions → Deploy → Run workflow**)
+and pick `full`.
+
+Until the secrets below exist the deploy job skips cleanly rather than failing,
+so merging to main is safe before you set this up.
+
+### Repository secrets
+
+**Settings → Secrets and variables → Actions → New repository secret**
+
+| Secret | Required | Value |
+| --- | --- | --- |
+| `DO_TOKEN` | yes | same DigitalOcean token as above |
+| `DEPLOY_SSH_KEY` | yes | contents of `~/.ssh/forknife67_deploy` (the **private** key, whole file including the BEGIN/END lines) |
+| `CF_API_TOKEN` | only for `full` mode | same Cloudflare token |
+| `ACME_EMAIL` | only for `full` mode | your email |
+| `DEPLOY_KNOWN_HOSTS` | recommended | output of `ssh-keyscan <droplet-ip>` |
+
+Optionally set a repository **variable** `DOMAIN` if you ever move off
+`forknife67.com`.
+
+```bash
+# after the first full deploy, to fill in the two host-specific secrets
+cat ~/.ssh/forknife67_deploy      # -> DEPLOY_SSH_KEY
+ssh-keyscan <droplet-ip>          # -> DEPLOY_KNOWN_HOSTS
+```
+
+Without `DEPLOY_KNOWN_HOSTS` the deploy trusts the host key on first use, which
+is fine for a hobby project but is a real (if narrow) MITM window on a fresh
+runner. Pinning it takes one command.
+
+### Requiring approval before a deploy
+
+The deploy job targets a `production` environment. If you want a manual gate,
+create it under **Settings → Environments → production** and add yourself as a
+required reviewer; deploys then wait for your click.
+
+---
+
 ## Operating it
 
 ```bash

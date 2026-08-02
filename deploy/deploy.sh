@@ -63,7 +63,15 @@ if node is not None:
 ' "$1"
 }
 
-for var in DO_TOKEN CF_API_TOKEN ACME_EMAIL; do
+# APP_ONLY=1 ships code to an existing droplet and nothing else — no droplet
+# creation, no DNS changes, no certificate work. This is what CI runs on every
+# merge to main: a redeploy has no business rewriting DNS or touching TLS.
+APP_ONLY="${APP_ONLY:-0}"
+
+required_vars="DO_TOKEN"
+[ "$APP_ONLY" = "1" ] || required_vars="$required_vars CF_API_TOKEN ACME_EMAIL"
+
+for var in $required_vars; do
   [ -n "${!var:-}" ] || die "$var is not set. See the header of this script."
 done
 command -v python3 >/dev/null || die "python3 is required"
@@ -96,31 +104,39 @@ acct="$(do_api GET /account)"
 echo "$acct" | grep -q '"account"' || die "DigitalOcean token rejected: $acct"
 info "DigitalOcean: $(echo "$acct" | jget "account.email")"
 
-cf_ok="$(cf_api GET /user/tokens/verify | jget "success")"
-[ "$cf_ok" = "True" ] || die "Cloudflare token rejected"
-info "Cloudflare: token valid"
+if [ "$APP_ONLY" = "1" ]; then
+  info "APP_ONLY — skipping Cloudflare, DNS and TLS steps"
+else
+  cf_ok="$(cf_api GET /user/tokens/verify | jget "success")"
+  [ "$cf_ok" = "True" ] || die "Cloudflare token rejected"
+  info "Cloudflare: token valid"
 
-# ---------------------------------------------------------------------------
-log "Confirming $SIZE is still the cheapest droplet"
+  # -------------------------------------------------------------------------
+  log "Confirming $SIZE is still the cheapest droplet"
 
-cheapest="$(do_api GET '/sizes?per_page=200' | python3 -c '
+  cheapest="$(do_api GET '/sizes?per_page=200' | python3 -c '
 import sys, json
 sizes = [s for s in json.load(sys.stdin).get("sizes", []) if s.get("available")]
 sizes.sort(key=lambda s: s["price_monthly"])
 if sizes:
     print(sizes[0]["slug"], "$" + str(sizes[0]["price_monthly"]) + "/mo")
 ')"
-info "cheapest available: $cheapest"
-info "using:             $SIZE"
-case "$cheapest" in
-  "$SIZE "*) ;;
-  *) info "NOTE: $SIZE is not the cheapest right now — override with SIZE=..." ;;
-esac
+  info "cheapest available: $cheapest"
+  info "using:             $SIZE"
+  case "$cheapest" in
+    "$SIZE "*) ;;
+    *) info "NOTE: $SIZE is not the cheapest right now — override with SIZE=..." ;;
+  esac
+fi
 
 # ---------------------------------------------------------------------------
 log "Ensuring an SSH deploy key exists"
 
 if [ ! -f "$SSH_KEY" ]; then
+  # Generating a fresh key in APP_ONLY mode would be useless: the public key is
+  # only injected into a droplet at creation time, so a new key cannot log in.
+  [ "$APP_ONLY" = "1" ] && die "APP_ONLY needs an existing key at $SSH_KEY (set SSH_KEY, or supply it from CI secrets)"
+
   mkdir -p "$(dirname "$SSH_KEY")"
   ssh-keygen -t ed25519 -N '' -C "forknife67-deploy" -f "$SSH_KEY" >/dev/null
   info "generated $SSH_KEY"
@@ -143,6 +159,10 @@ log "Ensuring the droplet exists"
 
 existing="$(do_api GET "/droplets?tag_name=forknife67")"
 droplet_id="$(echo "$existing" | jget "droplets.0.id")"
+
+if [ -z "$droplet_id" ] && [ "$APP_ONLY" = "1" ]; then
+  die "no droplet tagged 'forknife67' — run a full deploy first (without APP_ONLY)"
+fi
 
 if [ -z "$droplet_id" ]; then
   info "creating $DROPLET_NAME ($SIZE, $REGION)…"
@@ -177,6 +197,8 @@ done
 info "IP: $ip"
 
 # ---------------------------------------------------------------------------
+if [ "$APP_ONLY" != "1" ]; then
+
 log "Pointing $DOMAIN at $ip in Cloudflare"
 
 zone_id="$(cf_api GET "/zones?name=$DOMAIN" | jget "result.0.id")"
@@ -214,6 +236,8 @@ cf_api PATCH "/zones/$zone_id/settings/min_tls_version" '{"value":"1.2"}' >/dev/
 cf_api PATCH "/zones/$zone_id/settings/automatic_https_rewrites" '{"value":"on"}' >/dev/null || true
 cf_api PATCH "/zones/$zone_id/settings/brotli" '{"value":"on"}' >/dev/null || true
 
+fi  # end of DNS/TLS provisioning
+
 # ---------------------------------------------------------------------------
 log "Waiting for SSH"
 
@@ -225,10 +249,12 @@ done
 ssh "${SSH_OPTS[@]}" "root@$ip" true 2>/dev/null || die "could not SSH to $ip"
 info "connected"
 
-log "Waiting for first-boot provisioning to finish"
-ssh "${SSH_OPTS[@]}" "root@$ip" 'cloud-init status --wait >/dev/null 2>&1 || true; test -f /var/lib/cloud/forknife-ready' \
-  || die "cloud-init did not complete — check /var/log/cloud-init-output.log on the droplet"
-info "provisioned"
+if [ "$APP_ONLY" != "1" ]; then
+  log "Waiting for first-boot provisioning to finish"
+  ssh "${SSH_OPTS[@]}" "root@$ip" 'cloud-init status --wait >/dev/null 2>&1 || true; test -f /var/lib/cloud/forknife-ready' \
+    || die "cloud-init did not complete — check /var/log/cloud-init-output.log on the droplet"
+  info "provisioned"
+fi
 
 # ---------------------------------------------------------------------------
 log "Shipping the app"
@@ -246,6 +272,8 @@ ssh "${SSH_OPTS[@]}" "root@$ip" 'systemctl is-active --quiet forknife67' \
 info "forknife67.service is running"
 
 # ---------------------------------------------------------------------------
+if [ "$APP_ONLY" != "1" ]; then
+
 log "Issuing the TLS certificate (DNS-01 via Cloudflare)"
 
 # DNS-01 rather than HTTP-01: it works regardless of proxy state and does not
@@ -283,6 +311,8 @@ ssh "${SSH_OPTS[@]}" "root@$ip" '
 '
 info "nginx reloaded with TLS"
 
+fi  # end of TLS provisioning
+
 # ---------------------------------------------------------------------------
 log "Verifying"
 
@@ -301,10 +331,11 @@ fi
 
 cat <<EOF
 
-  Droplet   $DROPLET_NAME  ($SIZE)  $ip
+  Droplet   $DROPLET_NAME  $ip
   App       https://$DOMAIN
   SSH       ssh -i $SSH_KEY root@$ip
   Logs      ssh -i $SSH_KEY root@$ip journalctl -u forknife67 -f
-  Redeploy  DOMAIN=$DOMAIN ./deploy/deploy.sh
+  Redeploy  DOMAIN=$DOMAIN ./deploy/deploy.sh          (full)
+            DOMAIN=$DOMAIN APP_ONLY=1 ./deploy/deploy.sh  (code only)
 
 EOF

@@ -66,8 +66,14 @@ See [`deploy/DEPLOY.md`](deploy/DEPLOY.md). One script puts it on the cheapest
 DigitalOcean droplet behind Cloudflare with TLS:
 
 ```bash
-DO_TOKEN=... CF_API_TOKEN=... ACME_EMAIL=... ./deploy/deploy.sh
+DO_TOKEN=... CF_API_TOKEN=... ACME_EMAIL=... ./deploy/deploy.sh   # full
+DO_TOKEN=... APP_ONLY=1 ./deploy/deploy.sh                        # code only
 ```
+
+It's idempotent, so it doubles as the redeploy path. Once the repository
+secrets are set, merges to `main` deploy automatically via
+`.github/workflows/deploy.yml` — tests first, code-only by default, with a
+manual `full` mode for infrastructure changes.
 
 ## How it's built
 
