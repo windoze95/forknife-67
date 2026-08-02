@@ -754,8 +754,16 @@ $('resetAll').addEventListener('click', () => {
 /* ---------------------------------------------------------------------- */
 
 let syncTimer = null;
-let syncInFlight = false;
-let syncQueued = false;
+
+/**
+ * Syncs run one at a time, chained. Dropping a sync because another was in
+ * flight meant a "Sync now" tap could do nothing at all, and left the caller
+ * unable to tell whether their own edits had reached the server yet.
+ *
+ * Chaining instead means the returned promise always covers a run that started
+ * after the caller's edits.
+ */
+let syncChain = Promise.resolve();
 
 function setSyncState(state, message) {
   $('syncBtn').dataset.state = state;
@@ -787,14 +795,15 @@ function scheduleSync() {
   syncTimer = setTimeout(() => syncNow({ quiet: true }), 2500);
 }
 
-async function syncNow({ quiet = false } = {}) {
+function syncNow(options = {}) {
+  // Never let one failed run break the chain for the next caller.
+  syncChain = syncChain.then(() => runSync(options), () => runSync(options));
+  return syncChain;
+}
+
+async function runSync({ quiet = false } = {}) {
   if (!ui.syncCode) {
     if (!quiet) toast('Connect a vault code first');
-    return;
-  }
-
-  if (syncInFlight) {
-    syncQueued = true;
     return;
   }
 
@@ -803,7 +812,6 @@ async function syncNow({ quiet = false } = {}) {
     return;
   }
 
-  syncInFlight = true;
   setSyncState('busy', 'Syncing…');
 
   try {
@@ -831,12 +839,6 @@ async function syncNow({ quiet = false } = {}) {
     console.error('[forknife] sync failed:', err);
     setSyncState('error', 'Sync failed — your data is still safe on this device.');
     if (!quiet) toast('Sync failed');
-  } finally {
-    syncInFlight = false;
-    if (syncQueued) {
-      syncQueued = false;
-      scheduleSync();
-    }
   }
 }
 
@@ -952,4 +954,8 @@ window.__forknife = {
   getDoc: () => doc,
   getCounts: () => countsFor(doc),
   isBlankSprite,
+  // Resolves only once a sync that began after this call has finished, which
+  // is the only reliable "my edits are on the server" signal for a test.
+  sync: () => syncNow({ quiet: true }),
+  lastSync: () => ui.lastSync,
 };

@@ -306,20 +306,20 @@ await check('a second device connecting with the code pulls the collection', asy
   await second.keyboard.press('Escape');
 });
 
+/**
+ * Awaiting __forknife.sync() is the only deterministic "my edits are on the
+ * server" signal. Watching the sync badge flip to "On" is a trap: it is
+ * already "On" from the previous sync, so the wait returns instantly and the
+ * assertion races the request.
+ */
+const syncDevice = (target) => target.evaluate(() => window.__forknife.sync());
+
 await check('an edit on device two reaches device one', async () => {
   await second.locator('.tile[data-id="88"]').click(); // -> owned
-  await second.evaluate(() => document.getElementById('syncNow').click());
-  await second.waitForFunction(() => document.getElementById('syncTag').textContent === 'On', null, {
-    timeout: 8000,
-  });
+  await syncDevice(second); // push must land before device one pulls
+  await syncDevice(page);
 
-  await page.evaluate(() => document.getElementById('syncNow').click());
-  await page.waitForFunction(
-    () => document.querySelector('.tile[data-id="88"]')?.dataset.status === 'owned',
-    null,
-    { timeout: 8000 },
-  );
-
+  equal(await tile(page, 88).getAttribute('data-status'), 'owned');
   equal(await page.locator('#progressCount').textContent(), '4 / 111');
 });
 
@@ -327,21 +327,28 @@ await check('simultaneous edits on different sprites both survive', async () => 
   await page.locator('.tile[data-id="15"]').click(); // device one -> owned
   await second.locator('.tile[data-id="16"]').click(); // device two -> owned
 
-  await page.evaluate(() => document.getElementById('syncNow').click());
-  await second.evaluate(() => document.getElementById('syncNow').click());
-  await page.evaluate(() => document.getElementById('syncNow').click());
-  await second.evaluate(() => document.getElementById('syncNow').click());
+  // Both push, then both pull, so each device has seen the other's edit.
+  await Promise.all([syncDevice(page), syncDevice(second)]);
+  await Promise.all([syncDevice(page), syncDevice(second)]);
 
-  await page.waitForFunction(
-    () =>
-      document.querySelector('.tile[data-id="15"]')?.dataset.status === 'owned' &&
-      document.querySelector('.tile[data-id="16"]')?.dataset.status === 'owned',
-    null,
-    { timeout: 8000 },
-  );
-
+  equal(await tile(page, 15).getAttribute('data-status'), 'owned', 'own edit kept');
+  equal(await tile(page, 16).getAttribute('data-status'), 'owned', 'other device edit received');
   equal(await page.locator('#progressCount').textContent(), '6 / 111', 'device one');
   equal(await second.locator('#progressCount').textContent(), '6 / 111', 'device two');
+});
+
+await check('a queued sync is never silently dropped', async () => {
+  // Three overlapping calls with no awaits between them: chaining means all
+  // three run, and the last one still reflects the edit made before them.
+  await page.locator('.tile[data-id="77"]').click();
+  await page.evaluate(() => Promise.all([
+    window.__forknife.sync(),
+    window.__forknife.sync(),
+    window.__forknife.sync(),
+  ]));
+
+  await syncDevice(second);
+  equal(await tile(second, 77).getAttribute('data-status'), 'owned', 'edit reached the other device');
 });
 
 /* ------------------------------ offline --------------------------------- */
