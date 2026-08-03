@@ -325,7 +325,9 @@ test('group counts read against the whole sprite, not the current filter', () =>
   ]);
 
   const entries = RELEASED_ENTRIES.filter((entry) => entry.spriteKey === 'water');
-  assert.deepEqual(groupCounts(doc, entries), { collected: 2, total: 6 });
+  // maxed is separate from collected: the heading colours the two halves of
+  // "2 / 6" on different rules.
+  assert.deepEqual(groupCounts(doc, entries), { collected: 2, maxed: 1, total: 6 });
 });
 
 /* ---------------------------------------------------------------------- */

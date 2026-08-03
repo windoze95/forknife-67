@@ -350,14 +350,24 @@ export function countsFor(doc) {
   };
 }
 
-/** Progress for one base sprite's group heading, e.g. "2 / 6". */
+/**
+ * Progress for one base sprite's group heading, e.g. "2 / 6".
+ *
+ * `maxed` is tracked separately from `collected` because the heading colours
+ * them differently: mastering even one of a sprite's variants is worth seeing
+ * from the top of the group.
+ */
 export function groupCounts(doc, entries) {
   let collected = 0;
+  let maxed = 0;
+
   for (const entry of entries) {
     const status = doc.sprites[entry.id]?.status;
+    if (status === 'maxed') maxed += 1;
     if (status === 'owned' || status === 'maxed') collected += 1;
   }
-  return { collected, total: entries.length };
+
+  return { collected, maxed, total: entries.length };
 }
 
 /** Catalog metadata for an id, or null for custom and unknown entries. */

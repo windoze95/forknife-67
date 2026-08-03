@@ -31,6 +31,7 @@ import {
   CATALOG_PATCH,
   ALL_ENTRIES,
   RELEASED_ENTRIES,
+  VAULTED_ENTRIES,
   RARITY_LABEL,
   groupsFor,
   searchTextFor,
@@ -38,7 +39,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.1.0';
+const APP_VERSION = '2.2.0';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -360,10 +361,16 @@ function updateTile(id) {
 
 function repaintGroupCount(section) {
   if (!section) return;
+
   const ids = JSON.parse(section.dataset.all);
-  const { collected, total } = groupCounts(doc, ids.map((id) => ({ id })));
-  section.querySelector('.group-count').textContent = `${collected} / ${total}`;
+  const { collected, maxed, total } = groupCounts(doc, ids.map((id) => ({ id })));
+
+  section.querySelector('.gc-have').textContent = String(collected);
+  section.querySelector('.gc-total').textContent = String(total);
+
   section.dataset.done = String(collected === total);
+  // "some" the moment one variant is mastered, "all" only when every one is.
+  section.dataset.maxed = maxed === 0 ? 'none' : maxed === total ? 'all' : 'some';
 }
 
 function groupSection(group) {
@@ -390,6 +397,8 @@ function groupSection(group) {
 
   const count = document.createElement('span');
   count.className = 'group-count';
+  // Two spans, because the halves colour independently.
+  count.innerHTML = '<span class="gc-have"></span> / <span class="gc-total"></span>';
   head.append(count);
 
   if (group.sprite?.power) {
@@ -472,10 +481,65 @@ function applyTheme() {
   }
 }
 
+/**
+ * The handful of entries that shipped, got pulled, and are due back.
+ *
+ * They are worth calling out rather than leaving greyed out somewhere down the
+ * grid — knowing Ironmouse lands on the 4th is the kind of thing you check the
+ * app for. The section removes itself once the catalog marks them live, so
+ * nothing has to be cleaned up by hand afterwards.
+ */
+function renderComingSoon() {
+  const section = $('comingSoon');
+  section.hidden = VAULTED_ENTRIES.length === 0;
+  if (section.hidden) return;
+
+  const frag = document.createDocumentFragment();
+
+  for (const entry of VAULTED_ENTRIES) {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'soon-item';
+    item.dataset.id = entry.id;
+
+    const art = document.createElement('img');
+    art.src = artFor(entry.id);
+    art.alt = '';
+    art.width = 30;
+    art.height = 30;
+    art.decoding = 'async';
+    item.append(art);
+
+    const name = document.createElement('span');
+    name.className = 'soon-name';
+    name.textContent = entry.name;
+    item.append(name);
+
+    const when = document.createElement('span');
+    when.className = 'soon-when';
+    when.textContent = entry.returns ? formatDate(entry.returns) : 'No date yet';
+    item.append(when);
+
+    item.setAttribute(
+      'aria-label',
+      `${entry.name}, ${entry.returns ? `returns ${formatDate(entry.returns)}` : 'no return date announced'}`,
+    );
+    frag.append(item);
+  }
+
+  $('soonList').replaceChildren(frag);
+}
+
+$('soonList').addEventListener('click', (event) => {
+  const item = event.target.closest('.soon-item');
+  if (item) openDetail(item.dataset.id);
+});
+
 function renderAll() {
   document.body.classList.toggle('compact', ui.compact);
   renderChips();
   renderProgress();
+  renderComingSoon();
   renderGrid();
 }
 

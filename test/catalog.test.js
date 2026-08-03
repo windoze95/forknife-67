@@ -16,6 +16,8 @@ import {
   VARIANT_DUST,
   RARITIES,
   groupsFor,
+  entriesFor,
+  visibleEntries,
   idForName,
   formatDrop,
 } from '../public/lib/catalog.js';
@@ -37,8 +39,27 @@ const RELEASED_SPRITES = 24;
 test('the catalog holds the counts the game reports', () => {
   assert.equal(RELEASED_ENTRIES.length, RELEASED);
   assert.equal(ALL_ENTRIES.length, TOTAL);
-  assert.equal(groupsFor(false).length, RELEASED_SPRITES);
+  assert.equal(SPRITES.length, 25);
   assert.equal(groupsFor(true).length, SPRITES.length);
+});
+
+test('what counts and what is drawn are not the same set', () => {
+  // A sprite you cannot obtain must not sit in the denominator, but one with a
+  // known return date is still worth seeing. Collapsing these two into one
+  // "released" flag is what makes a tracker either lie about your progress or
+  // hide the thing you are waiting for.
+  assert.equal(entriesFor(false).length, RELEASED, 'countable is obtainable-only');
+  assert.equal(visibleEntries(false).length, RELEASED + 2, 'drawn includes the vaulted two');
+
+  assert.equal(groupsFor(false).length, RELEASED_SPRITES + 1, 'Ironmouse is drawn, not counted');
+  assert.ok(
+    !entriesFor(false).some((entry) => entry.id === 'ironmouse'),
+    'and never reaches the total',
+  );
+
+  // The toggle widens both to everything.
+  assert.equal(entriesFor(true).length, TOTAL);
+  assert.equal(visibleEntries(true).length, TOTAL);
 });
 
 test('every entry id is unique and storable', () => {
@@ -178,9 +199,12 @@ test("a variant cannot outlive the sprite it belongs to", () => {
   }
 });
 
-test('an unreleased sprite takes its variants with it', () => {
-  const hidden = groupsFor(false).find((group) => group.sprite.key === 'ironmouse');
-  assert.equal(hidden, undefined);
+test('never-released entries stay out of the default grid; vaulted ones do not', () => {
+  const visible = new Set(visibleEntries(false).map((entry) => entry.id));
+
+  assert.ok(visible.has('ironmouse'), 'due back on a known date, so it is shown');
+  assert.ok(visible.has('grim.gem'), 'vaulted with no date is still shown');
+  assert.ok(!visible.has('water.gem'), 'never shipped, so it is not');
 });
 
 test('every entry has artwork, and nothing is shipped that nothing points at', () => {

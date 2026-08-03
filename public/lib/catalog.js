@@ -580,8 +580,27 @@ export const SPRITE_BY_KEY = new Map(SPRITES.map((sprite) => [sprite.key, sprite
 /** Entries that are actually obtainable right now. */
 export const RELEASED_ENTRIES = ALL_ENTRIES.filter((entry) => entry.released);
 
-export function entriesFor(includeUnreleased = false) {
-  return includeUnreleased ? ALL_ENTRIES : RELEASED_ENTRIES;
+/** Shipped once, pulled back, coming again — with a date where one is known. */
+export const VAULTED_ENTRIES = ALL_ENTRIES.filter((entry) => entry.state === 'vaulted');
+
+/**
+ * What counts toward your total: only what you can actually go and get.
+ *
+ * Kept separate from `visibleEntries` on purpose. A sprite you cannot obtain
+ * must not sit in the denominator making the collection look further away than
+ * it is.
+ */
+export function entriesFor(includeHidden = false) {
+  return includeHidden ? ALL_ENTRIES : RELEASED_ENTRIES;
+}
+
+/**
+ * What the grid draws. Wider than the countable set: something with a known
+ * return date is worth seeing greyed out and waiting for, and it turns into an
+ * ordinary entry by itself the moment the catalog marks it live.
+ */
+export function visibleEntries(includeHidden = false) {
+  return includeHidden ? ALL_ENTRIES : ALL_ENTRIES.filter((entry) => entry.state !== 'datamined');
 }
 
 export function isCustomId(id) {
@@ -592,13 +611,12 @@ export function isCustomId(id) {
  * Entries grouped by base sprite, which is how the grid is laid out: one
  * heading per sprite, then its variants.
  */
-export function groupsFor(includeUnreleased = false) {
+export function groupsFor(includeHidden = false) {
+  const visible = visibleEntries(includeHidden);
   const groups = [];
 
   for (const sprite of SPRITES) {
-    if (sprite.released === false && !includeUnreleased) continue;
-
-    const entries = entriesFor(includeUnreleased).filter((entry) => entry.spriteKey === sprite.key);
+    const entries = visible.filter((entry) => entry.spriteKey === sprite.key);
     if (entries.length) groups.push({ sprite, entries });
   }
 

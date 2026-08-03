@@ -401,6 +401,53 @@ main { padding: 0 14px; }
   min-height: 18px;
 }
 
+/* Sprites that shipped, got pulled, and are due back. Hides itself when the
+   catalog says there are none, so it needs no tidying up afterwards. */
+.soon {
+  margin: 0 0 18px;
+  padding: 11px 12px;
+  background: var(--surface);
+  border: 1.5px dashed var(--line);
+  border-radius: var(--radius);
+}
+
+.soon-title {
+  margin: 0 0 9px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.soon-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.soon-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 11px 6px 7px;
+  font: inherit;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface-2);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.soon-item:hover { filter: brightness(0.97); }
+.soon-item img { width: 30px; height: 30px; object-fit: contain; }
+.soon-name { font-size: 13px; font-weight: 700; }
+
+.soon-when {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hunting);
+}
+
 /* One section per base sprite; the tiles inside it are its variants. */
 .grid { display: flex; flex-direction: column; gap: 20px; }
 
@@ -432,7 +479,24 @@ body.compact .tile-hunt { width: 22px; height: 22px; }
   font-variant-numeric: tabular-nums;
 }
 
-.group[data-done='true'] .group-count { color: var(--owned); }
+/*
+ * The heading's counter carries two facts at once.
+ *
+ * The left number is your progress: green once you hold every variant. The
+ * right number is the prize: gold the moment any one of them is mastered, so
+ * scrolling the list shows you where you have already crowned something. When
+ * the whole sprite is mastered the counter goes gold end to end, which is the
+ * only state that earns both numbers.
+ */
+.group[data-done='true'] .gc-have { color: var(--owned); }
+.group[data-maxed='some'] .gc-total,
+.group[data-maxed='all'] .gc-total { color: var(--maxed); }
+
+/* Last, and matching .gc-have specifically: all-mastered means the whole
+   counter is gold, and it has to beat the green that "all collected" just put
+   on the left number — every mastered sprite is also a collected one. */
+.group[data-maxed='all'] .group-count,
+.group[data-maxed='all'] .gc-have { color: var(--maxed); }
 
 .group-power {
   flex-basis: 100%;
