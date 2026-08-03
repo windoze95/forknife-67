@@ -39,7 +39,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.2.0';
+const APP_VERSION = '2.3.0';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -58,6 +58,7 @@ let ui = {
   theme: 'light',
   syncCode: '',
   lastSync: 0,
+  installDismissed: false,
 };
 
 /** Snapshot of the sprite before the most recent change, for the Undo button. */
@@ -544,6 +545,122 @@ function renderAll() {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Install                                                                  */
+/* ---------------------------------------------------------------------- */
+
+/**
+ * Installing matters more here than for most web apps: on the home screen it
+ * opens full screen and the service worker has already cached the shell, so it
+ * works with no signal. That is the situation the whole app is for.
+ *
+ * Three routes, and only one of them is the standard event:
+ *
+ *   Chrome / Edge / Android  fire `beforeinstallprompt`, which we hold onto and
+ *                            replay when the player asks.
+ *   iOS Safari               never fires it. The only route is the Share sheet,
+ *                            so the app has to describe it. Skipping this would
+ *                            leave iPhone users — the ones most likely to want
+ *                            a home screen icon — with nothing at all.
+ *   Already installed        say so, and offer nothing.
+ */
+let installPrompt = null;
+
+function isInstalled() {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    // Safari's own flag, which predates the standard media query.
+    navigator.standalone === true
+  );
+}
+
+function isIos() {
+  const ua = navigator.userAgent;
+  // iPadOS 13+ reports itself as a Mac; the touch points give it away.
+  return /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1);
+}
+
+function renderInstall() {
+  const installed = isInstalled();
+  const canPrompt = installPrompt !== null;
+  const ios = isIos();
+
+  $('installTag').textContent = installed ? 'Installed' : 'Not installed';
+  $('installTag').dataset.on = String(installed);
+  $('installActions').hidden = installed || !canPrompt;
+  $('installSteps').hidden = installed || canPrompt || !ios;
+
+  $('installBlurb').textContent = installed
+    ? "You're running the installed copy — it opens full screen and works offline."
+    : ios
+      ? 'Add it to your home screen and it opens full screen, with no Safari chrome and no signal needed.'
+      : 'Installed, it opens in its own window and works with no signal — which is the point, since you will be using it mid-match.';
+
+  if (!installed && !canPrompt && !ios) {
+    $('installBlurb').textContent =
+      'Your browser offers this from its own menu — look for Install or Add to Home Screen.';
+  }
+
+  // The strip is a one-time nudge: only where there is a route to offer, and
+  // never again once it has been waved away.
+  const dismissed = ui.installDismissed === true;
+  const bar = $('installBar');
+  bar.hidden = installed || dismissed || (!canPrompt && !ios);
+
+  if (!bar.hidden) {
+    $('installBarAction').textContent = ios ? 'How' : 'Install';
+    $('installBarText').textContent = ios
+      ? 'Add it to your home screen to open it full screen, offline.'
+      : 'Keep it a tap away — add it to your home screen.';
+  }
+}
+
+window.addEventListener('beforeinstallprompt', (event) => {
+  // Suppress the browser's own bar so the offer sits where the app controls it.
+  event.preventDefault();
+  installPrompt = event;
+  renderInstall();
+});
+
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  ui.installDismissed = true;
+  saveUi();
+  renderInstall();
+  toast('Installed — open it from your home screen');
+});
+
+async function runInstall() {
+  if (!installPrompt) return;
+
+  installPrompt.prompt();
+  const { outcome } = await installPrompt.userChoice;
+
+  // The event is single-use whichever way it goes; a dismissal means the
+  // browser will offer it again later on its own terms.
+  installPrompt = null;
+  if (outcome === 'dismissed') toast('No problem — it is in the menu when you want it');
+  renderInstall();
+}
+
+$('installBtn').addEventListener('click', runInstall);
+
+$('installBarAction').addEventListener('click', () => {
+  if (installPrompt) {
+    runInstall();
+    return;
+  }
+  // iOS: nothing to prompt, so show the steps.
+  openMenu();
+  $('installPanel').scrollIntoView({ block: 'start', behavior: 'smooth' });
+});
+
+$('installDismiss').addEventListener('click', () => {
+  ui.installDismissed = true;
+  saveUi();
+  renderInstall();
+});
+
+/* ---------------------------------------------------------------------- */
 /* Toast                                                                    */
 /* ---------------------------------------------------------------------- */
 
@@ -875,6 +992,7 @@ function openMenu() {
   $('unreleasedToggle').checked = doc.unreleased;
   $('compactToggle').checked = ui.compact;
   renderSyncUi();
+  renderInstall();
   applyTheme();
   menuDialog.showModal();
 }
@@ -1209,6 +1327,7 @@ $('catalogPatch').textContent = CATALOG_PATCH;
 
 renderAll();
 renderSyncUi();
+renderInstall();
 
 if (ui.syncCode) syncNow({ quiet: true });
 

@@ -27,7 +27,8 @@ phone and your PC.
 - **Chest odds and summon cost** on every entry, so "hunt it or buy it with
   dust" is an answerable question
 - **Undo** on every change, because a mis-tap happens
-- **Works offline** — installable as a PWA, data lives on the device
+- **Installable** — add it to your home screen and it opens full screen, offline;
+  iPhone gets the Share-sheet steps, since Safari never fires an install prompt
 - **Optional cloud sync** — one vault code, no account, no email
 - Dark and light themes, compact grid mode
 
@@ -122,7 +123,7 @@ npm run dev:worker  # the Worker + Durable Object under workerd
 npm run test:worker # 21 contract tests against a real `wrangler dev`
 ```
 
-Browser end-to-end tests (34 checks, needs Chromium):
+Browser end-to-end tests (39 checks, needs Chromium):
 
 ```bash
 npm install --no-save playwright
@@ -131,7 +132,7 @@ node test/browser-smoke.mjs
 ```
 
 `BASE_URL` points that suite at anything already running, which is how the
-Worker gets the same 34 checks rather than a second suite that only rhymes
+Worker gets the same 39 checks rather than a second suite that only rhymes
 with them:
 
 ```bash
