@@ -172,11 +172,18 @@ svg { width: 1em; height: 1em; display: block; }
  * plain 1px rule would otherwise go. Two crossed repeating gradients — the
  * coloured stripe and a darker weave running the other way — read as a
  * diamond lattice without a single image or byte of network.
+ *
+ * Drawn on two elements and only ever seen on one: it ends the header while the
+ * header is on screen, and crowns the toolbar the moment the toolbar takes over
+ * the top of the screen. The handoff is exact, because the observer that flips
+ * `is-stuck` watches a sentinel sitting between the two — the header's band
+ * leaves the viewport on the same scroll position the toolbar arrives at it. So
+ * the band reads as one strip that stays put while the page moves under it.
  */
-.topbar::after {
+.topbar::after,
+.toolbar::before {
   content: '';
   position: absolute;
-  inset: auto 0 0;
   height: 6px;
   background-image:
     repeating-linear-gradient(-45deg, var(--weave) 0 11px, transparent 11px 22px),
@@ -189,6 +196,8 @@ svg { width: 1em; height: 1em; display: block; }
       var(--lilac) 44px 55px
     );
 }
+
+.topbar::after { inset: auto 0 0; }
 
 .topbar-main {
   display: flex;
@@ -316,7 +325,12 @@ svg { width: 1em; height: 1em; display: block; }
   position: sticky;
   top: 0;
   z-index: 15;
-  padding: 12px 14px 10px;
+  /* The extra 6px at the top is the band's, so the gap above the search field
+     is the same whether the band is showing or not. Paying for it here rather
+     than in an `is-stuck` rule keeps the toolbar one height: growing it at the
+     moment it sticks would shove the grid down by 6px, and can chatter between
+     stuck and unstuck at exactly the scroll position that triggers it. */
+  padding: 18px 14px 10px;
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid transparent;
@@ -325,6 +339,16 @@ svg { width: 1em; height: 1em; display: block; }
 /* The sentinel above flips this on once the toolbar actually sticks, so the
    separator only appears when there is content scrolling underneath it. */
 .toolbar.is-stuck { border-bottom-color: var(--line); }
+
+/* Unstuck, the toolbar's band would sit directly beneath the header's own, and
+   two of them stacked is one too many. */
+.toolbar::before {
+  inset: 0 0 auto;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+}
+
+.toolbar.is-stuck::before { opacity: 1; }
 
 .search { position: relative; display: flex; align-items: center; }
 
