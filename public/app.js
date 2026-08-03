@@ -40,7 +40,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.4.0';
+const APP_VERSION = '2.4.1';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -61,6 +61,8 @@ let ui = {
   // the app's own fault. Anyone who picks Light or Dark keeps it on every load,
   // and it syncs nowhere — a phone and a PC can disagree about this one.
   theme: 'system',
+  // Set once, by migrateTheme. See it for why this has to be sticky.
+  themeMigrated: false,
   syncCode: '',
   lastSync: 0,
   installDismissed: false,
@@ -94,6 +96,28 @@ function loadLocal() {
   if (!STATUSES.includes(ui.filter) && !['all', 'hunting'].includes(ui.filter)) {
     ui.filter = 'all';
   }
+
+  migrateTheme();
+}
+
+/**
+ * Carry devices from the old Light default onto System, once.
+ *
+ * `saveUi` writes the whole settings object, so every device that ever changed
+ * a filter is holding a `light` nobody chose — it was simply the default at the
+ * moment of some unrelated write. Left alone, those devices would never see the
+ * new default at all.
+ *
+ * Only `light` is ambiguous: `dark` and `system` were never defaults, so a
+ * stored one can only have come from the Appearance panel. The flag has to be
+ * persisted even when nothing moved, because without it this would run again on
+ * the next load and undo a Light the player has since picked on purpose.
+ */
+function migrateTheme() {
+  if (ui.themeMigrated === true) return;
+  if (ui.theme === 'light') ui.theme = 'system';
+  ui.themeMigrated = true;
+  saveUi();
 }
 
 function saveDoc() {

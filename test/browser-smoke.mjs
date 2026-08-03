@@ -643,6 +643,41 @@ await check('a first run takes the palette from the device, not a fixed default'
   await night.context().close();
 });
 
+await check('a device carrying the old Light default is moved onto System, once', async () => {
+  const upgraded = await newPage({ colorScheme: 'dark' });
+  await upgraded.goto(base);
+
+  // Exactly what the previous version wrote for someone who never opened the
+  // Appearance panel: saveUi serialises the whole object, so the default of the
+  // day is on every device whether or not anyone chose it.
+  await upgraded.evaluate(() => {
+    localStorage.setItem(
+      'forknife67.ui.v1',
+      JSON.stringify({ filter: 'all', query: '', compact: false, theme: 'light', syncCode: '', lastSync: 0, installDismissed: false }),
+    );
+  });
+  await upgraded.reload();
+  await upgraded.waitForSelector('.tile');
+
+  equal(await upgraded.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  equal(
+    await upgraded.evaluate(() => JSON.parse(localStorage.getItem('forknife67.ui.v1')).theme),
+    'system',
+    'and the upgrade is written down, not re-derived every load',
+  );
+
+  // The one that matters: picking Light afterwards is a real choice, and a
+  // second run of the migration must not take it away again.
+  await upgraded.locator('#menuBtn').click();
+  await upgraded.waitForSelector('#menu[open]');
+  await upgraded.locator('[data-theme-set="light"]').click();
+  await upgraded.reload();
+  await upgraded.waitForSelector('.tile');
+  equal(await upgraded.evaluate(() => document.documentElement.dataset.theme), 'light');
+
+  await upgraded.context().close();
+});
+
 /* ------------------------- two-device sync ------------------------------ */
 
 let vaultCode = '';
