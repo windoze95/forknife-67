@@ -28,6 +28,12 @@ after(async () => {
 const CODE_A = 'ABCDEFGH12345678';
 const CODE_B = 'ZYXWVTSR98765432';
 
+/** A dozen real catalog ids, for the concurrency test. */
+const IDS = [
+  'water', 'water.gold', 'earth', 'fire.holofoil', 'fishy', 'air.gummy',
+  'duck', 'ghost.galaxy', 'dream', 'punk.cube', 'grim', 'zeropoint.quack',
+];
+
 function put(code, body) {
   return fetch(`${base}/api/vault/${code}`, {
     method: 'PUT',
@@ -64,12 +70,19 @@ test('sets hardening headers on static responses', async () => {
   assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
 });
 
-test('never serves the app shell from cache-forever headers', async () => {
-  const res = await fetch(`${base}/`);
-  assert.equal(res.headers.get('cache-control'), 'no-cache');
+test('never serves any part of the shell from cache-forever headers', async () => {
+  // No filename carries a content hash, so every piece of the shell has to
+  // revalidate together. A cached app.js paired with a fresh index.html reads
+  // a document written by a schema it does not know and shows an empty
+  // collection — a worse failure than simply not updating.
+  for (const file of ['/', '/sw.js', '/app.js', '/styles.css', '/lib/vault.js', '/lib/catalog.js']) {
+    const res = await fetch(`${base}${file}`);
+    assert.equal(res.headers.get('cache-control'), 'no-cache', `${file} may be served stale`);
+  }
 
-  const sw = await fetch(`${base}/sw.js`);
-  assert.equal(sw.headers.get('cache-control'), 'no-cache', 'a cached SW would freeze deploys');
+  // Artwork does not have this problem and should stay cacheable.
+  const icon = await fetch(`${base}/icons/icon-192.png`);
+  assert.match(icon.headers.get('cache-control'), /max-age=\d+/);
 });
 
 test('_headers is edge configuration, never a served file', async () => {
@@ -162,15 +175,18 @@ test('GET on an unknown vault is a 404, not an empty vault', async () => {
 
 test('PUT stores a vault and GET returns it', async () => {
   const res = await put(CODE_A, {
-    total: 111,
-    sprites: { 14: { id: 14, status: 'owned', hunting: false, name: 'blue one', notes: '', updatedAt: 1000 } },
+    sprites: {
+      'water.gold': {
+        id: 'water.gold', status: 'owned', hunting: false, name: '', notes: 'squadmate has it', updatedAt: 1000,
+      },
+    },
   });
 
   assert.equal(res.status, 200);
-  assert.equal((await res.json()).sprites[14].status, 'owned');
+  assert.equal((await res.json()).sprites['water.gold'].status, 'owned');
 
   const stored = await (await fetch(`${base}/api/vault/${CODE_A}`)).json();
-  assert.equal(stored.sprites[14].name, 'blue one');
+  assert.equal(stored.sprites['water.gold'].notes, 'squadmate has it');
 });
 
 test('the raw vault code is never used as a filename', async () => {
@@ -183,54 +199,49 @@ test('the raw vault code is never used as a filename', async () => {
 });
 
 test('two devices editing different sprites both survive a sync', async () => {
-  await put(CODE_B, { total: 111, sprites: { 1: { id: 1, status: 'owned', updatedAt: 100 } } });
+  await put(CODE_B, { sprites: { water: { id: 'water', status: 'owned', updatedAt: 100 } } });
   const merged = await (await put(CODE_B, {
-    total: 111,
-    sprites: { 2: { id: 2, status: 'maxed', updatedAt: 110 } },
+    sprites: { fire: { id: 'fire', status: 'maxed', updatedAt: 110 } },
   })).json();
 
-  assert.equal(merged.sprites[1].status, 'owned', 'the first device edit must not be clobbered');
-  assert.equal(merged.sprites[2].status, 'maxed');
+  assert.equal(merged.sprites.water.status, 'owned', 'the first device edit must not be clobbered');
+  assert.equal(merged.sprites.fire.status, 'maxed');
 });
 
 test('a stale device cannot overwrite a newer edit', async () => {
-  await put(CODE_B, { total: 111, sprites: { 5: { id: 5, status: 'maxed', updatedAt: 5000 } } });
+  await put(CODE_B, { sprites: { dream: { id: 'dream', status: 'maxed', updatedAt: 5000 } } });
   const merged = await (await put(CODE_B, {
-    total: 111,
-    sprites: { 5: { id: 5, status: 'needed', updatedAt: 4000 } },
+    sprites: { dream: { id: 'dream', status: 'needed', updatedAt: 4000 } },
   })).json();
 
-  assert.equal(merged.sprites[5].status, 'maxed');
+  assert.equal(merged.sprites.dream.status, 'maxed');
 });
 
 test('concurrent writes to one vault do not lose edits', async () => {
   const code = 'CNCRRNT123456789';
-  const writes = [];
-
-  for (let i = 1; i <= 12; i += 1) {
-    writes.push(put(code, { total: 111, sprites: { [i]: { id: i, status: 'owned', updatedAt: 1000 + i } } }));
-  }
+  const writes = IDS.map((id, i) =>
+    put(code, { sprites: { [id]: { id, status: 'owned', updatedAt: 1000 + i } } }),
+  );
 
   await Promise.all(writes);
   const stored = await (await fetch(`${base}/api/vault/${code}`)).json();
 
-  for (let i = 1; i <= 12; i += 1) {
-    assert.equal(stored.sprites[i]?.status, 'owned', `sprite ${i} was lost in a concurrent write`);
+  for (const id of IDS) {
+    assert.equal(stored.sprites[id]?.status, 'owned', `${id} was lost in a concurrent write`);
   }
 });
 
 test('untouched sprites are stripped before storage', async () => {
   const code = 'CMPACTAAAA111111';
   await put(code, {
-    total: 111,
     sprites: {
-      1: { id: 1, status: 'needed', hunting: false, name: '', notes: '', updatedAt: 10 },
-      2: { id: 2, status: 'owned', updatedAt: 10 },
+      water: { id: 'water', status: 'needed', hunting: false, name: '', notes: '', updatedAt: 10 },
+      fire: { id: 'fire', status: 'owned', updatedAt: 10 },
     },
   });
 
   const stored = await (await fetch(`${base}/api/vault/${code}`)).json();
-  assert.deepEqual(Object.keys(stored.sprites), ['2']);
+  assert.deepEqual(Object.keys(stored.sprites), ['fire']);
 });
 
 test('malformed JSON and oversized bodies are refused', async () => {
@@ -244,7 +255,7 @@ test('malformed JSON and oversized bodies are refused', async () => {
   const huge = await fetch(`${base}/api/vault/${CODE_A}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ total: 111, pad: 'x'.repeat(900 * 1024) }),
+    body: JSON.stringify({ sprites: {}, pad: 'x'.repeat(900 * 1024) }),
   }).catch(() => null);
 
   // The server destroys the socket once the cap is passed, so either a 413 or
@@ -257,7 +268,7 @@ test('malformed JSON and oversized bodies are refused', async () => {
 
 test('a corrupted vault file does not take the endpoint down', async () => {
   const code = 'CRRPT11111111111';
-  await put(code, { total: 111, sprites: { 9: { id: 9, status: 'owned', updatedAt: 1 } } });
+  await put(code, { sprites: { seven: { id: 'seven', status: 'owned', updatedAt: 1 } } });
 
   const files = await fs.readdir(dataDir);
   const crypto = await import('node:crypto');
@@ -268,7 +279,7 @@ test('a corrupted vault file does not take the endpoint down', async () => {
   const res = await fetch(`${base}/api/vault/${code}`);
   assert.equal(res.status, 404, 'unreadable vault reads as absent rather than 500');
 
-  const recovered = await put(code, { total: 111, sprites: { 9: { id: 9, status: 'maxed', updatedAt: 2 } } });
+  const recovered = await put(code, { sprites: { seven: { id: 'seven', status: 'maxed', updatedAt: 2 } } });
   assert.equal(recovered.status, 200, 'the client copy can heal the vault');
 });
 

@@ -6,24 +6,48 @@
  * free and side-effect free.
  */
 
-export const SCHEMA_VERSION = 1;
+import {
+  CUSTOM_PREFIX,
+  ENTRY_BY_ID,
+  entriesFor,
+  idForName,
+  isCustomId,
+} from './catalog.js';
 
-/** Sprites currently findable in game. Bump via settings when Epic adds more. */
-export const DEFAULT_TOTAL = 111;
+/**
+ * v1 tracked 111 numbered slots that the player named by hand. v2 tracks the
+ * real catalog, keyed by entry id. See `migrateEntry` for how the old data is
+ * carried across.
+ */
+export const SCHEMA_VERSION = 2;
 
 /** Hard ceiling so a malicious/garbled payload cannot balloon storage. */
-export const MAX_TOTAL = 2000;
+export const MAX_ENTRIES = 2000;
 
 export const MAX_NAME_LEN = 60;
 export const MAX_NOTES_LEN = 500;
 
 /**
+ * Entry ids are `water`, `water.gold`, or `custom.7`.
+ *
+ * This validates the SHAPE, not membership of the catalog. An id from a newer
+ * catalog than this build knows about is stored and synced untouched rather
+ * than dropped, so a phone that has not picked up the latest deploy cannot
+ * quietly delete progress made on a device that has.
+ */
+const ID_RE = /^[a-z0-9]{1,32}(\.[a-z0-9]{1,24})?$/;
+
+export function isValidEntryId(id) {
+  return typeof id === 'string' && ID_RE.test(id);
+}
+
+/**
  * Status order is also the tap-cycle order in the UI:
  *   needed -> owned -> maxed -> needed
  *
- * needed = not in my inventory yet (this is what I'm hunting)
- * owned  = I have it, but not extracted at max level (no crown in game)
- * maxed  = I have it at max level, so in game it wears a crown
+ * needed = not in my collection yet (this is what I'm hunting)
+ * owned  = extracted, but not at max level (no crown in game)
+ * maxed  = mastered, so in game it wears a crown
  */
 export const STATUSES = ['needed', 'owned', 'maxed'];
 
@@ -35,12 +59,6 @@ export const STATUS_LABEL = {
 
 export function isStatus(value) {
   return STATUSES.includes(value);
-}
-
-export function clampTotal(value) {
-  const n = Math.floor(Number(value));
-  if (!Number.isFinite(n)) return DEFAULT_TOTAL;
-  return Math.min(MAX_TOTAL, Math.max(1, n));
 }
 
 function clampString(value, max) {
@@ -56,19 +74,19 @@ function clampTimestamp(value) {
   return n > 32503680000000 ? 0 : n;
 }
 
-export function emptyDoc(total = DEFAULT_TOTAL) {
+export function emptyDoc() {
   return {
     schema: SCHEMA_VERSION,
-    total: clampTotal(total),
-    totalUpdatedAt: 0,
+    unreleased: false,
+    unreleasedAt: 0,
     sprites: {},
   };
 }
 
 /**
- * A sprite record is only stored once the player has touched it. Untouched
- * slots are implicit "needed" and cost nothing, which keeps the sync payload
- * tiny on a fresh account.
+ * A record is only stored once the player has touched it. Untouched entries
+ * are implicit "needed" and cost nothing, which keeps the sync payload tiny on
+ * a fresh account.
  */
 export function makeSprite(id, now = Date.now()) {
   return {
@@ -84,8 +102,8 @@ export function makeSprite(id, now = Date.now()) {
 export function normalizeSprite(raw, fallbackId) {
   if (!raw || typeof raw !== 'object') return null;
 
-  const id = Math.floor(Number(raw.id ?? fallbackId));
-  if (!Number.isFinite(id) || id < 1 || id > MAX_TOTAL) return null;
+  const id = raw.id ?? fallbackId;
+  if (!isValidEntryId(id)) return null;
 
   return {
     id,
@@ -107,6 +125,49 @@ export function isBlankSprite(sprite) {
   );
 }
 
+/* ---------------------------------------------------------------------- */
+/* v1 migration                                                           */
+/* ---------------------------------------------------------------------- */
+
+/** A v1 id was the slot number: 1..2000. */
+function isLegacyId(id) {
+  const n = Number(id);
+  return Number.isInteger(n) && n >= 1 && n <= MAX_ENTRIES;
+}
+
+/**
+ * Carries one numbered v1 slot onto a v2 id.
+ *
+ * If the player typed a name the catalog recognises, the record lands on that
+ * catalog entry — someone who had filled in "Gold Water Sprite" keeps that tick
+ * rather than starting over. Anything else becomes a custom entry, so a list
+ * of private shorthand ("the little blue one") survives the upgrade instead of
+ * being thrown away for not matching.
+ */
+function migrateEntry(raw, fallbackId) {
+  const slot = Math.floor(Number(raw.id ?? fallbackId));
+  const name = clampString(raw.name, MAX_NAME_LEN);
+
+  const matched = idForName(name);
+  if (matched) return { id: matched, name: '' };
+
+  // An unnamed slot the player still marked: under v1 the number WAS the
+  // identity, so it becomes the label rather than an unreadable blank row.
+  return { id: `${CUSTOM_PREFIX}.${slot}`, name: name || `Slot ${slot}` };
+}
+
+/* ---------------------------------------------------------------------- */
+/* Document normalisation                                                 */
+/* ---------------------------------------------------------------------- */
+
+function putSprite(doc, sprite) {
+  const existing = doc.sprites[sprite.id];
+  // Two v1 slots can carry the same name and so migrate onto one entry; the
+  // more recent edit is the one the player meant.
+  if (existing && existing.updatedAt > sprite.updatedAt) return;
+  doc.sprites[sprite.id] = sprite;
+}
+
 /**
  * Coerce arbitrary parsed JSON (a file import, a request body, an old
  * localStorage blob) into a valid document. Never throws.
@@ -115,19 +176,44 @@ export function normalizeDoc(raw) {
   const doc = emptyDoc();
   if (!raw || typeof raw !== 'object') return doc;
 
-  if (raw.total !== undefined) doc.total = clampTotal(raw.total);
-  doc.totalUpdatedAt = clampTimestamp(raw.totalUpdatedAt);
+  doc.unreleased = raw.unreleased === true;
+  doc.unreleasedAt = clampTimestamp(raw.unreleasedAt);
 
   const source = raw.sprites;
-  if (Array.isArray(source)) {
-    for (let i = 0; i < source.length; i += 1) {
-      const sprite = normalizeSprite(source[i], i + 1);
-      if (sprite) doc.sprites[sprite.id] = sprite;
+  const entries = Array.isArray(source)
+    ? source.map((value, i) => [i + 1, value])
+    : source && typeof source === 'object'
+      ? Object.entries(source)
+      : [];
+
+  let count = 0;
+
+  for (const [key, value] of entries) {
+    if (count >= MAX_ENTRIES) break;
+    if (!value || typeof value !== 'object') continue;
+
+    const rawId = value.id ?? key;
+
+    if (isLegacyId(rawId)) {
+      // An untouched v1 slot carried no information, and turning all 111 of
+      // them into custom entries would bury the catalog under empty rows.
+      // The numeric id would fail id validation, so probe under a stand-in.
+      const probe = normalizeSprite({ ...value, id: 'probe' }, 'probe');
+      if (!probe || isBlankSprite(probe)) continue;
+
+      const { id, name } = migrateEntry(value, key);
+      const sprite = normalizeSprite({ ...value, id, name }, id);
+      if (sprite) {
+        putSprite(doc, sprite);
+        count += 1;
+      }
+      continue;
     }
-  } else if (source && typeof source === 'object') {
-    for (const [key, value] of Object.entries(source)) {
-      const sprite = normalizeSprite(value, key);
-      if (sprite) doc.sprites[sprite.id] = sprite;
+
+    const sprite = normalizeSprite(value, key);
+    if (sprite) {
+      putSprite(doc, sprite);
+      count += 1;
     }
   }
 
@@ -135,11 +221,11 @@ export function normalizeDoc(raw) {
 }
 
 /**
- * Merge two documents with per-sprite last-write-wins.
+ * Merge two documents with per-entry last-write-wins.
  *
- * Merging per sprite rather than per document is what makes two devices safe:
- * marking #14 owned on a phone and #92 maxed on a PC keeps both edits, whereas
- * whole-document LWW would silently drop one of them.
+ * Merging per entry rather than per document is what makes two devices safe:
+ * marking Gold Water owned on a phone and Grim maxed on a PC keeps both edits,
+ * whereas whole-document LWW would silently drop one of them.
  *
  * Ties resolve to `a`, so callers should pass the local document as `a` to keep
  * the device's own most recent intent.
@@ -147,20 +233,17 @@ export function normalizeDoc(raw) {
 export function mergeDocs(a, b) {
   const left = normalizeDoc(a);
   const right = normalizeDoc(b);
-  const merged = emptyDoc(left.total);
+  const merged = emptyDoc();
 
-  if (right.totalUpdatedAt > left.totalUpdatedAt) {
-    merged.total = right.total;
-    merged.totalUpdatedAt = right.totalUpdatedAt;
+  if (right.unreleasedAt > left.unreleasedAt) {
+    merged.unreleased = right.unreleased;
+    merged.unreleasedAt = right.unreleasedAt;
   } else {
-    merged.total = left.total;
-    merged.totalUpdatedAt = left.totalUpdatedAt;
+    merged.unreleased = left.unreleased;
+    merged.unreleasedAt = left.unreleasedAt;
   }
 
-  const ids = new Set([
-    ...Object.keys(left.sprites),
-    ...Object.keys(right.sprites),
-  ]);
+  const ids = new Set([...Object.keys(left.sprites), ...Object.keys(right.sprites)]);
 
   for (const id of ids) {
     const l = left.sprites[id];
@@ -177,30 +260,85 @@ export function mergeDocs(a, b) {
   return merged;
 }
 
-/** Drop untouched records so exports and sync payloads stay small. */
+/**
+ * Drop untouched records so exports and sync payloads stay small.
+ *
+ * Custom entries are the exception: a blank one is a DELETION, not an untouched
+ * slot, and it has to survive into the payload. Strip it and the server would
+ * still be holding the old copy, which the next merge would hand straight back
+ * — the entry you just deleted reappears on every device.
+ */
 export function compactDoc(doc) {
-  const out = emptyDoc(doc.total);
-  out.totalUpdatedAt = doc.totalUpdatedAt;
+  const out = emptyDoc();
+  out.unreleased = doc.unreleased;
+  out.unreleasedAt = doc.unreleasedAt;
   for (const sprite of Object.values(doc.sprites)) {
-    if (!isBlankSprite(sprite)) out.sprites[sprite.id] = sprite;
+    if (!isBlankSprite(sprite) || isCustomId(sprite.id)) out.sprites[sprite.id] = sprite;
   }
   return out;
 }
 
+/* ---------------------------------------------------------------------- */
+/* Counting                                                               */
+/* ---------------------------------------------------------------------- */
+
+function customIndex(id) {
+  const n = Number(id.slice(CUSTOM_PREFIX.length + 1));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Custom entries the player added, in the order they were added. Blank ones
+ * are deletion tombstones (see `compactDoc`) and are not entries any more.
+ */
+export function customIds(doc) {
+  return Object.keys(doc.sprites)
+    .filter((id) => isCustomId(id) && !isBlankSprite(doc.sprites[id]))
+    .sort((a, b) => customIndex(a) - customIndex(b));
+}
+
+/**
+ * Counts tombstones too. Reusing a deleted entry's id would resurrect its
+ * tombstone on the next merge and delete the new entry instead.
+ */
+export function nextCustomId(doc) {
+  const highest = Object.keys(doc.sprites)
+    .filter(isCustomId)
+    .reduce((max, id) => Math.max(max, customIndex(id)), 0);
+  return `${CUSTOM_PREFIX}.${highest + 1}`;
+}
+
+/**
+ * Every id this device is currently tracking: the catalog entries in scope,
+ * plus the player's own additions.
+ *
+ * Ids that are neither — an entry from a catalog newer than this build — are
+ * deliberately left out. They are still stored and synced; they just are not
+ * counted, because a total that moves without any visible rows is worse than a
+ * total that is briefly a few short.
+ */
+export function activeIds(doc) {
+  return [...entriesFor(doc.unreleased).map((entry) => entry.id), ...customIds(doc)];
+}
+
 export function countsFor(doc) {
-  const total = doc.total;
+  const ids = activeIds(doc);
+  const scope = new Set(ids);
+
   let owned = 0;
   let maxed = 0;
   let hunting = 0;
 
   for (const sprite of Object.values(doc.sprites)) {
-    if (sprite.id > total) continue;
+    if (!scope.has(sprite.id)) continue;
     if (sprite.status === 'owned') owned += 1;
     else if (sprite.status === 'maxed') maxed += 1;
     if (sprite.hunting && sprite.status === 'needed') hunting += 1;
   }
 
+  const total = ids.length;
   const collected = owned + maxed;
+
   return {
     total,
     owned,
@@ -210,6 +348,21 @@ export function countsFor(doc) {
     hunting,
     percent: total > 0 ? Math.round((collected / total) * 100) : 0,
   };
+}
+
+/** Progress for one base sprite's group heading, e.g. "2 / 6". */
+export function groupCounts(doc, entries) {
+  let collected = 0;
+  for (const entry of entries) {
+    const status = doc.sprites[entry.id]?.status;
+    if (status === 'owned' || status === 'maxed') collected += 1;
+  }
+  return { collected, total: entries.length };
+}
+
+/** Catalog metadata for an id, or null for custom and unknown entries. */
+export function catalogEntry(id) {
+  return ENTRY_BY_ID.get(id) || null;
 }
 
 /* ---------------------------------------------------------------------- */

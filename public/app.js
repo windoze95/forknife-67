@@ -10,14 +10,16 @@
 import {
   STATUSES,
   STATUS_LABEL,
-  DEFAULT_TOTAL,
-  MAX_TOTAL,
   makeSprite,
   normalizeDoc,
   mergeDocs,
   compactDoc,
   emptyDoc,
   countsFor,
+  groupCounts,
+  catalogEntry,
+  customIds,
+  nextCustomId,
   isBlankSprite,
   generateCode,
   normalizeCode,
@@ -25,7 +27,18 @@ import {
   isValidCode,
 } from './lib/vault.js';
 
-const APP_VERSION = '1.0.0';
+import {
+  CATALOG_PATCH,
+  ALL_ENTRIES,
+  RELEASED_ENTRIES,
+  RARITY_LABEL,
+  groupsFor,
+  searchTextFor,
+  formatDrop,
+  isCustomId,
+} from './lib/catalog.js';
+
+const APP_VERSION = '2.0.0';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -35,7 +48,7 @@ const $ = (id) => document.getElementById(id);
 /* State                                                                    */
 /* ---------------------------------------------------------------------- */
 
-let doc = emptyDoc(DEFAULT_TOTAL);
+let doc = emptyDoc();
 
 let ui = {
   filter: 'all',
@@ -152,29 +165,65 @@ function applyUndo() {
 /* Filtering                                                                */
 /* ---------------------------------------------------------------------- */
 
-function visibleIds() {
+/**
+ * The catalog grouped by base sprite, with the player's own additions as a
+ * final group. Groups are the unit of layout: one heading per sprite, then its
+ * variants, because "which Water Sprites am I missing" is the question you
+ * actually ask standing over a chest.
+ */
+function allGroups() {
+  const groups = groupsFor(doc.unreleased).map(({ sprite, entries }) => ({
+    key: sprite.key,
+    sprite,
+    entries,
+  }));
+
+  const mine = customIds(doc);
+  if (mine.length) {
+    groups.push({
+      key: 'custom',
+      sprite: null,
+      entries: mine.map((id) => ({ id, name: getSprite(id).name || 'Untitled', variantLabel: '' })),
+    });
+  }
+
+  return groups;
+}
+
+function matchesFilter(id) {
+  const sprite = getSprite(id);
+  if (ui.filter === 'hunting') return sprite.hunting;
+  if (ui.filter === 'all') return true;
+  return sprite.status === ui.filter;
+}
+
+/**
+ * Search covers the catalog name, the spelling Epic uses in patch notes, the
+ * rarity, the sprite's power and where it is found — plus whatever the player
+ * wrote in their own notes.
+ */
+function matchesQuery(id, query) {
+  if (!query) return true;
+  if (searchTextFor(id).includes(query)) return true;
+
+  const sprite = getSprite(id);
+  return (
+    sprite.name.toLowerCase().includes(query) || sprite.notes.toLowerCase().includes(query)
+  );
+}
+
+/** Groups trimmed to the entries that survive the filter and the search. */
+function visibleGroups() {
   const query = ui.query.trim().toLowerCase();
   const out = [];
 
-  for (let id = 1; id <= doc.total; id += 1) {
-    const sprite = getSprite(id);
-
-    if (ui.filter === 'hunting') {
-      if (!sprite.hunting) continue;
-    } else if (ui.filter !== 'all' && sprite.status !== ui.filter) {
-      continue;
-    }
-
-    if (query) {
-      const name = sprite.name.toLowerCase();
-      const notes = sprite.notes.toLowerCase();
-      const num = String(id);
-      if (!num.startsWith(query) && !name.includes(query) && !notes.includes(query)) {
-        continue;
-      }
-    }
-
-    out.push(id);
+  for (const group of allGroups()) {
+    const entries = group.entries.filter(
+      (entry) => matchesFilter(entry.id) && matchesQuery(entry.id, query),
+    );
+    // `all` is kept so the heading can read "2 / 6" against the whole sprite
+    // rather than against whatever the current filter left standing.
+    if (entries.length) out.push({ ...group, entries, all: group.entries });
   }
 
   return out;
@@ -187,6 +236,16 @@ function visibleIds() {
 const grid = $('grid');
 const tileNodes = new Map();
 
+/** Ids currently on screen, in order — what Prev/Next in the sheet walks. */
+let flatVisible = [];
+
+/** The name the game shows. Custom entries fall back to what the player typed. */
+function displayName(id) {
+  const entry = catalogEntry(id);
+  if (entry) return entry.name;
+  return getSprite(id).name || 'Untitled entry';
+}
+
 /**
  * A tile is a group wrapping two real buttons rather than one clickable div.
  * Nesting the hunt button inside a role="button" element would leave it
@@ -194,11 +253,9 @@ const tileNodes = new Map();
  * handling that a <button> gets for free.
  */
 function tileFor(id) {
-  const sprite = getSprite(id);
-
   const tile = document.createElement('div');
   tile.className = 'tile';
-  tile.dataset.id = String(id);
+  tile.dataset.id = id;
   tile.setAttribute('role', 'group');
 
   const main = document.createElement('button');
@@ -209,40 +266,41 @@ function tileFor(id) {
   mark.className = 'tile-mark';
   main.append(mark);
 
-  const num = document.createElement('span');
-  num.className = 'tile-num';
-  num.textContent = String(id);
-  main.append(num);
-
-  const name = document.createElement('span');
-  name.className = 'tile-name';
-  main.append(name);
+  const label = document.createElement('span');
+  label.className = 'tile-label';
+  main.append(label);
 
   tile.append(main);
 
   const hunt = document.createElement('button');
   hunt.type = 'button';
   hunt.className = 'tile-hunt';
-  hunt.dataset.hunt = String(id);
+  hunt.dataset.hunt = id;
   hunt.innerHTML = '<svg aria-hidden="true"><use href="#i-target"/></svg>';
   tile.append(hunt);
 
   tileNodes.set(id, tile);
-  paintTile(tile, sprite);
+  paintTile(tile, getSprite(id));
   return tile;
 }
 
 const MARK = { needed: '', owned: '✓', maxed: '♛' };
 
 function paintTile(tile, sprite) {
+  const entry = catalogEntry(sprite.id);
+  const name = displayName(sprite.id);
+
   tile.dataset.status = sprite.status;
   tile.dataset.hunting = String(sprite.hunting);
-  tile.querySelector('.tile-mark').textContent = MARK[sprite.status];
-  tile.querySelector('.tile-name').textContent = sprite.name;
+  if (entry) tile.dataset.variant = entry.variant;
+  if (entry && !entry.released) tile.dataset.unreleased = 'true';
 
-  const bits = [`Sprite ${sprite.id}`];
-  if (sprite.name) bits.push(sprite.name);
-  bits.push(STATUS_LABEL[sprite.status]);
+  tile.querySelector('.tile-mark').textContent = MARK[sprite.status];
+  // Inside a group the sprite's name is already the heading, so the tile only
+  // has to say which variant it is.
+  tile.querySelector('.tile-label').textContent = entry ? entry.variantLabel : name;
+
+  const bits = [name, STATUS_LABEL[sprite.status]];
   if (sprite.hunting) bits.push('on hunting list');
 
   const label = bits.join(', ');
@@ -253,7 +311,7 @@ function paintTile(tile, sprite) {
   hunt.setAttribute('aria-pressed', String(sprite.hunting));
   hunt.setAttribute(
     'aria-label',
-    sprite.hunting ? `Remove sprite ${sprite.id} from hunting list` : `Add sprite ${sprite.id} to hunting list`,
+    sprite.hunting ? `Remove ${name} from hunting list` : `Add ${name} to hunting list`,
   );
 }
 
@@ -262,6 +320,7 @@ function updateTile(id) {
   if (!tile) return;
 
   paintTile(tile, getSprite(id));
+  repaintGroupCount(tile.closest('.group'));
 
   // If the change pushed it out of the active filter, drop it on the next
   // render rather than yanking it away mid-tap.
@@ -270,20 +329,77 @@ function updateTile(id) {
   tile.classList.add('just-changed');
 }
 
+function repaintGroupCount(section) {
+  if (!section) return;
+  const ids = JSON.parse(section.dataset.all);
+  const { collected, total } = groupCounts(doc, ids.map((id) => ({ id })));
+  section.querySelector('.group-count').textContent = `${collected} / ${total}`;
+  section.dataset.done = String(collected === total);
+}
+
+function groupSection(group) {
+  const section = document.createElement('section');
+  section.className = 'group';
+  section.dataset.key = group.key;
+  section.dataset.all = JSON.stringify(group.all.map((entry) => entry.id));
+
+  const head = document.createElement('div');
+  head.className = 'group-head';
+
+  const title = document.createElement('h2');
+  title.className = 'group-name';
+  title.textContent = group.sprite ? group.sprite.name : 'Your own entries';
+  head.append(title);
+
+  if (group.sprite) {
+    const rarity = document.createElement('span');
+    rarity.className = 'rarity';
+    rarity.dataset.rarity = group.sprite.rarity;
+    rarity.textContent = RARITY_LABEL[group.sprite.rarity];
+    head.append(rarity);
+  }
+
+  const count = document.createElement('span');
+  count.className = 'group-count';
+  head.append(count);
+
+  if (group.sprite?.power) {
+    const power = document.createElement('p');
+    power.className = 'group-power';
+    power.textContent = group.sprite.power;
+    head.append(power);
+  }
+
+  section.append(head);
+
+  const tiles = document.createElement('div');
+  tiles.className = 'group-tiles';
+  for (const entry of group.entries) tiles.append(tileFor(entry.id));
+  section.append(tiles);
+
+  repaintGroupCount(section);
+  return section;
+}
+
 function renderGrid() {
-  const ids = visibleIds();
+  const groups = visibleGroups();
   const frag = document.createDocumentFragment();
 
   tileNodes.clear();
-  for (const id of ids) frag.append(tileFor(id));
+  flatVisible = [];
+
+  for (const group of groups) {
+    frag.append(groupSection(group));
+    for (const entry of group.entries) flatVisible.push(entry.id);
+  }
 
   grid.replaceChildren(frag);
-  $('empty').hidden = ids.length > 0;
+  $('empty').hidden = flatVisible.length > 0;
 
   const counts = countsFor(doc);
   const filtered = ui.filter !== 'all' || ui.query.trim() !== '';
   $('resultLine').textContent = filtered
-    ? `Showing ${ids.length} of ${counts.total}`
+    ? `Showing ${flatVisible.length} of ${counts.total}`
     : '';
 }
 
@@ -369,12 +485,13 @@ function cycleStatus(id) {
   const next = STATUSES[(STATUSES.indexOf(current) + 1) % STATUSES.length];
   setStatus(id, next);
 
+  const name = displayName(id);
   const label =
     next === 'maxed'
-      ? `Sprite ${id} → Maxed ♛`
+      ? `${name} → Maxed ♛`
       : next === 'owned'
-        ? `Sprite ${id} → Owned`
-        : `Sprite ${id} → Needed`;
+        ? `${name} → Owned`
+        : `${name} → Needed`;
   toast(label, { undo: true });
 }
 
@@ -382,7 +499,7 @@ grid.addEventListener('pointerdown', (event) => {
   const tile = event.target.closest('.tile');
   if (!tile || event.target.closest('.tile-hunt')) return;
 
-  pressId = Number(tile.dataset.id);
+  pressId = tile.dataset.id;
   longFired = false;
   pressOrigin = { x: event.clientX, y: event.clientY };
 
@@ -415,11 +532,10 @@ for (const type of ['pointerup', 'pointercancel', 'pointerleave']) {
 grid.addEventListener('click', (event) => {
   const huntBtn = event.target.closest('.tile-hunt');
   if (huntBtn) {
-    const id = Number(huntBtn.dataset.hunt);
+    const id = huntBtn.dataset.hunt;
     const now = toggleHunting(id);
-    toast(now ? `Sprite ${id} added to hunting list` : `Sprite ${id} off the hunting list`, {
-      undo: true,
-    });
+    const name = displayName(id);
+    toast(now ? `Hunting ${name}` : `${name} off the hunting list`, { undo: true });
     return;
   }
 
@@ -432,7 +548,7 @@ grid.addEventListener('click', (event) => {
     return;
   }
 
-  cycleStatus(Number(tile.dataset.id));
+  cycleStatus(tile.dataset.id);
 });
 
 // Enter and Space already fire click on a real <button>, so only the shortcut
@@ -444,7 +560,7 @@ grid.addEventListener('keydown', (event) => {
   if (!tile) return;
 
   event.preventDefault();
-  openDetail(Number(tile.dataset.id));
+  openDetail(tile.dataset.id);
 });
 
 /* ---------------------------------------------------------------------- */
@@ -459,12 +575,45 @@ function openDetail(id) {
   if (!detailDialog.open) detailDialog.showModal();
 }
 
+/** Sets a fact row's value, hiding the whole row when there is nothing to say. */
+function fact(id, value, label) {
+  const dd = $(id);
+  const row = dd.closest('.fact');
+  row.hidden = !value;
+  dd.textContent = value || '';
+  if (label) row.querySelector('dt').textContent = label;
+}
+
 function renderDetail() {
   const sprite = getSprite(detailId);
+  const entry = catalogEntry(detailId);
 
-  $('detailTitle').textContent = sprite.name
-    ? `#${sprite.id} · ${sprite.name}`
-    : `Sprite #${sprite.id}`;
+  $('detailTitle').textContent = displayName(detailId);
+
+  $('detailMeta').hidden = !entry;
+  // The name is the game's for a catalog entry, and the player's own for an
+  // entry they added, so the field only appears where it can be edited.
+  $('detailNameField').hidden = !!entry;
+  $('detailDelete').hidden = !isCustomId(detailId);
+
+  if (entry) {
+    const rarity = $('detailRarity');
+    rarity.textContent = RARITY_LABEL[entry.rarity];
+    rarity.dataset.rarity = entry.rarity;
+
+    const variant = $('detailVariant');
+    variant.textContent = entry.variantLabel;
+    variant.hidden = entry.variant === 'base';
+
+    $('detailUnreleased').hidden = entry.released;
+    $('detailPower').textContent = entry.power;
+
+    fact('factPerk', entry.perk, `${entry.variantLabel} bonus`);
+    fact('factScaling', entry.scaling);
+    fact('factWhere', entry.where);
+    fact('factDrop', entry.released ? formatDrop(entry.drop) : '');
+    fact('factDust', `${entry.dust.toLocaleString('en-US')} Sprite Dust`);
+  }
 
   for (const opt of detailDialog.querySelectorAll('.status-opt')) {
     opt.setAttribute('aria-checked', String(opt.dataset.status === sprite.status));
@@ -478,8 +627,9 @@ function renderDetail() {
     ? `Updated ${relativeTime(sprite.updatedAt)}`
     : 'Never marked';
 
-  $('detailPrev').disabled = detailId <= 1;
-  $('detailNext').disabled = detailId >= doc.total;
+  const index = flatVisible.indexOf(detailId);
+  $('detailPrev').disabled = index <= 0;
+  $('detailNext').disabled = index < 0 || index >= flatVisible.length - 1;
 }
 
 function relativeTime(ts) {
@@ -517,13 +667,27 @@ for (const [elId, key] of [['detailName', 'name'], ['detailNotes', 'notes']]) {
   });
 }
 
-$('detailPrev').addEventListener('click', () => {
-  if (detailId > 1) openDetail(detailId - 1);
+$('detailDelete').addEventListener('click', () => {
+  const name = displayName(detailId);
+  if (!confirm(`Delete ${name}? It goes from every device you sync with.`)) return;
+
+  // Blanking rather than removing leaves a tombstone that compactDoc keeps, so
+  // the deletion actually reaches the other devices instead of bouncing back.
+  writeSprite(detailId, { name: '', status: 'needed', hunting: false, notes: '' });
+  detailDialog.close();
+  renderAll();
+  toast(`Deleted ${name}`);
 });
 
-$('detailNext').addEventListener('click', () => {
-  if (detailId < doc.total) openDetail(detailId + 1);
-});
+// Prev/Next walk what is actually on screen, so stepping through a filtered
+// list stays inside that list instead of wandering into hidden entries.
+function step(delta) {
+  const next = flatVisible[flatVisible.indexOf(detailId) + delta];
+  if (next) openDetail(next);
+}
+
+$('detailPrev').addEventListener('click', () => step(-1));
+$('detailNext').addEventListener('click', () => step(1));
 
 detailDialog.addEventListener('close', () => {
   detailId = null;
@@ -598,13 +762,15 @@ document.addEventListener('keydown', (event) => {
 
 const menuDialog = $('menu');
 
-$('menuBtn').addEventListener('click', () => {
-  $('totalInput').value = String(doc.total);
+function openMenu() {
+  $('unreleasedToggle').checked = doc.unreleased;
   $('compactToggle').checked = ui.compact;
   renderSyncUi();
   applyTheme();
   menuDialog.showModal();
-});
+}
+
+$('menuBtn').addEventListener('click', openMenu);
 
 for (const btn of document.querySelectorAll('[data-close-menu]')) {
   btn.addEventListener('click', () => menuDialog.close());
@@ -617,17 +783,13 @@ for (const dialog of [menuDialog, detailDialog]) {
   });
 }
 
-$('totalInput').addEventListener('change', (event) => {
-  const next = Math.min(MAX_TOTAL, Math.max(1, Math.floor(Number(event.target.value) || DEFAULT_TOTAL)));
-  event.target.value = String(next);
-  if (next === doc.total) return;
-
-  doc.total = next;
-  doc.totalUpdatedAt = Date.now();
+$('unreleasedToggle').addEventListener('change', (event) => {
+  doc.unreleased = event.target.checked;
+  doc.unreleasedAt = Date.now();
   saveDoc();
   scheduleSync();
   renderAll();
-  toast(`Now tracking ${next} sprites`);
+  toast(doc.unreleased ? 'Showing unreleased entries' : 'Hiding unreleased entries');
 });
 
 $('compactToggle').addEventListener('change', (event) => {
@@ -649,37 +811,36 @@ window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', ()
 });
 
 /* ---------------------------------------------------------------------- */
-/* Bulk names                                                               */
+/* Your own entries                                                         */
 /* ---------------------------------------------------------------------- */
 
-$('bulkLoad').addEventListener('click', () => {
-  const lines = [];
-  for (let id = 1; id <= doc.total; id += 1) lines.push(getSprite(id).name);
-  $('bulkNames').value = lines.join('\n');
-});
-
-$('bulkApply').addEventListener('click', () => {
-  const lines = $('bulkNames').value.split('\n');
-  const now = Date.now();
-  let changed = 0;
-
-  for (let i = 0; i < lines.length && i < doc.total; i += 1) {
-    const name = lines[i].trim().slice(0, 60);
-    const current = getSprite(i + 1);
-    if (name === current.name) continue;
-    doc.sprites[i + 1] = { ...current, name, updatedAt: now };
-    changed += 1;
-  }
-
-  if (!changed) {
-    toast('No names changed');
+/**
+ * Epic ships sprites faster than this app can be redeployed, so there has to
+ * be a way to track one the same day it lands. A custom entry behaves exactly
+ * like a catalog entry — it counts, syncs and filters — it just carries a name
+ * you typed instead of one from the game files.
+ */
+$('addCustom').addEventListener('click', () => {
+  const name = $('customName').value.trim().slice(0, 60);
+  if (!name) {
+    toast('Give it a name first');
+    $('customName').focus();
     return;
   }
 
-  saveDoc();
-  scheduleSync();
+  const id = nextCustomId(doc);
+  writeSprite(id, { name });
+  $('customName').value = '';
+
   renderAll();
-  toast(`Named ${changed} sprite${changed === 1 ? '' : 's'}`);
+  toast(`Added ${name}`);
+});
+
+$('customName').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    $('addCustom').click();
+  }
 });
 
 /* ---------------------------------------------------------------------- */
@@ -742,8 +903,8 @@ $('resetStatuses').addEventListener('click', () => {
 $('resetAll').addEventListener('click', () => {
   if (!confirm('Erase every sprite, name and note on this device? This cannot be undone.')) return;
 
-  doc = emptyDoc(doc.total);
-  doc.totalUpdatedAt = Date.now();
+  doc = emptyDoc();
+  doc.unreleasedAt = Date.now();
   saveDoc();
   renderAll();
   toast('Everything erased');
@@ -846,11 +1007,7 @@ $('syncNow').addEventListener('click', () => syncNow());
 
 $('syncBtn').addEventListener('click', () => {
   if (!ui.syncCode) {
-    $('totalInput').value = String(doc.total);
-    $('compactToggle').checked = ui.compact;
-    renderSyncUi();
-    applyTheme();
-    menuDialog.showModal();
+    openMenu();
     $('codeInput').focus();
   } else {
     syncNow();
@@ -934,7 +1091,10 @@ applyTheme();
 
 $('search').value = ui.query || '';
 $('searchClear').hidden = !ui.query;
-$('version').textContent = `forknife 67 · v${APP_VERSION}`;
+$('version').textContent = `forknife 67 · v${APP_VERSION} · catalog ${CATALOG_PATCH}`;
+$('catalogSize').textContent = String(RELEASED_ENTRIES.length);
+$('catalogUnreleased').textContent = String(ALL_ENTRIES.length - RELEASED_ENTRIES.length);
+$('catalogPatch').textContent = CATALOG_PATCH;
 
 renderAll();
 renderSyncUi();
@@ -953,6 +1113,7 @@ if ('serviceWorker' in navigator) {
 window.__forknife = {
   getDoc: () => doc,
   getCounts: () => countsFor(doc),
+  getVisible: () => [...flatVisible],
   isBlankSprite,
   // Resolves only once a sync that began after this call has finished, which
   // is the only reliable "my edits are on the server" signal for a test.

@@ -268,12 +268,17 @@ async function serveStatic(req, res, urlPath) {
   const ext = path.extname(filePath).toLowerCase();
   const etag = `W/"${stat.size.toString(16)}-${stat.mtimeMs.toString(16)}"`;
 
-  // The service worker and shell must never be served stale, or a deploy would
-  // not reach devices that already installed the app.
-  const immutable = ext !== '.html' && !filePath.endsWith('sw.js');
-  const cacheControl = immutable
-    ? 'public, max-age=3600, must-revalidate'
-    : 'no-cache';
+  // The shell must never be served stale, or a deploy would not reach devices
+  // that already installed the app — and that has to include the scripts. No
+  // filename here carries a content hash, so a cached app.js will happily pair
+  // itself with a freshly fetched index.html, and half-updated is worse than
+  // not updated at all.
+  //
+  // Mirrors public/_headers, which does the same job for the edge-served copy.
+  // `no-cache` means revalidate, not "don't store": the ETag above turns nearly
+  // all of these into a 304.
+  const isShell = ext === '.html' || ext === '.css' || ext === '.js';
+  const cacheControl = isShell ? 'no-cache' : 'public, max-age=3600, must-revalidate';
 
   if (req.headers['if-none-match'] === etag) {
     res.writeHead(304, { etag, 'cache-control': cacheControl, ...SECURITY_HEADERS });

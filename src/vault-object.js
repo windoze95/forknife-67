@@ -11,7 +11,7 @@
  *      power mid-write could leave a half-written vault. SQLite gives us that.
  *
  * Storage is SQL rather than the key-value API on purpose: a vault is capped by
- * MAX_TOTAL (2000) sprites with names and notes, so a legitimate document can
+ * MAX_ENTRIES (2000) records with names and notes, so a legitimate document can
  * reach roughly 1.2 MB — an order of magnitude past the 128 KB ceiling on a
  * key-value value. A TEXT column has no such limit.
  */

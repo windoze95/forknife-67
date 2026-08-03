@@ -12,6 +12,16 @@
 
 # The shell and the service worker must never be served stale, or a deploy
 # would not reach devices that already installed the app.
+#
+# That has to cover the scripts too, not just the HTML. Filenames carry no
+# content hash, so a browser holding app.js from an hour ago will happily pair
+# it with a freshly fetched index.html. Half-updated is worse than not updated:
+# an old app.js reading a document the new one wrote sees no entries it
+# recognises and renders an empty collection.
+#
+# `no-cache` means revalidate, not "don't store" — the ETag still turns almost
+# every one of these into a 304, and the service worker still serves them
+# offline.
 /
   Cache-Control: no-cache
 
@@ -19,4 +29,13 @@
   Cache-Control: no-cache
 
 /sw.js
+  Cache-Control: no-cache
+
+/app.js
+  Cache-Control: no-cache
+
+/styles.css
+  Cache-Control: no-cache
+
+/lib/*
   Cache-Control: no-cache
