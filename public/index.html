@@ -10,7 +10,15 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--
+  Zoom is off: this is a grid you tap, and every zoom it offered was one you
+  triggered by accident mid-tap. It takes three pieces, because no one of them
+  covers every browser — `user-scalable=no` here for Chrome and Android, the
+  `touch-action` in styles.css for the gestures themselves, and a `gesturestart`
+  handler in app.js for iOS, which has ignored this attribute since iOS 10.
+  The OS-level magnifier and the browser's own text-size setting are untouched.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>forknife 67 — Sprite Tracker</title>
 <meta name="description" content="Track which Fortnite sprites you already have, which are maxed, and which you're still hunting.">
 <meta name="theme-color" content="#ffffff">

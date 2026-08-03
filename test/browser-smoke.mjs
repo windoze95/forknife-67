@@ -355,29 +355,41 @@ await check('collecting climbs the counter; mastering marks it', async () => {
   equal(await group(page, 'johnwick').getAttribute('data-progress'), 'none');
 });
 
-await check('two taps in the same place cycle a tile, they do not zoom the page', async () => {
-  const gestures = await page.evaluate(() => ({
-    tile: getComputedStyle(document.querySelector('.tile-main')).touchAction,
-    body: getComputedStyle(document.body).touchAction,
-    sheet: getComputedStyle(document.getElementById('detail')).touchAction,
-    notes: getComputedStyle(document.getElementById('detailNotes')).fontSize,
-    name: getComputedStyle(document.getElementById('detailName')).fontSize,
-    viewport: document.querySelector('meta[name="viewport"]').content,
-  }));
+await check('nothing on the page can be zoomed, by any of the three routes', async () => {
+  const gestures = await page.evaluate(() => {
+    // Dispatched at the body so it has to bubble: the handler is on document,
+    // and a listener registered as passive silently cannot do this.
+    const pinch = new Event('gesturestart', { bubbles: true, cancelable: true });
+    document.body.dispatchEvent(pinch);
 
-  equal(gestures.tile, 'manipulation', 'the tap target itself, which is the one that counts');
-  equal(gestures.body, 'manipulation');
-  equal(gestures.sheet, 'manipulation', 'the sheets are in the top layer, out from under the body');
+    return {
+      tile: getComputedStyle(document.querySelector('.tile-main')).touchAction,
+      body: getComputedStyle(document.body).touchAction,
+      sheet: getComputedStyle(document.getElementById('detail')).touchAction,
+      notes: getComputedStyle(document.getElementById('detailNotes')).fontSize,
+      name: getComputedStyle(document.getElementById('detailName')).fontSize,
+      viewport: document.querySelector('meta[name="viewport"]').content,
+      pinchRefused: pinch.defaultPrevented,
+    };
+  });
 
-  // The other zoom: iOS magnifies any field under 16px as it takes focus, and
-  // leaves you there.
+  // 1. The gestures, on the tap target itself as well as the document — a pinch
+  //    answers to whatever is under the fingers.
+  equal(gestures.tile, 'pan-x pan-y', 'a tile');
+  equal(gestures.body, 'pan-x pan-y', 'the document');
+  equal(gestures.sheet, 'pan-x pan-y', 'a sheet, which is in the top layer');
+
+  // 2. The meta, for the browsers that honour it.
+  assert(/user-scalable=no/.test(gestures.viewport), `viewport: ${gestures.viewport}`);
+  assert(/maximum-scale=1/.test(gestures.viewport), `viewport: ${gestures.viewport}`);
+
+  // 3. And WebKit's own gesture events, which are all iOS answers to.
+  assert(gestures.pinchRefused, 'iOS pinches the page regardless of the other two');
+
+  // Focus zoom is a fourth route: iOS magnifies any field under 16px as it
+  // takes focus, and leaves you there.
   equal(gestures.notes, '16px', 'notes field');
   equal(gestures.name, '16px', 'name field');
-
-  assert(
-    !/user-scalable|maximum-scale/.test(gestures.viewport),
-    'pinch-zoom is deliberately still available — only the double-tap shortcut went',
-  );
 });
 
 await check('the maxed tile shows a crown mark', async () => {
