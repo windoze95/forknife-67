@@ -86,12 +86,15 @@ const browser = await chromium.launch(
 
 const consoleErrors = [];
 
-async function newPage({ mobile = true } = {}) {
-  const context = await browser.newContext(
-    mobile
+async function newPage({ mobile = true, colorScheme } = {}) {
+  const context = await browser.newContext({
+    ...(mobile
       ? { viewport: { width: 414, height: 896 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true }
-      : { viewport: { width: 1280, height: 900 } },
-  );
+      : { viewport: { width: 1280, height: 900 } }),
+    // Left unset, playwright reports a light device — which is what every other
+    // check here assumes, so only the theme checks pass this.
+    ...(colorScheme ? { colorScheme } : {}),
+  });
 
   const page = await context.newPage();
   page.on('console', (msg) => {
@@ -103,6 +106,43 @@ async function newPage({ mobile = true } = {}) {
 
 const tile = (page, id) => page.locator(`.tile[data-id="${id}"]`);
 const group = (page, key) => page.locator(`.group[data-key="${key}"]`);
+
+/**
+ * What a group heading's counter is actually painting, next to the tokens it
+ * should be painting with. Resolving those through the browser keeps the
+ * comparison against whatever the theme renders rather than a hardcoded hex.
+ */
+async function counterInk(page, key) {
+  // The counter fades between rungs, and a colour read mid-fade is an
+  // interpolation that matches no token in the theme.
+  await group(page, key)
+    .locator('.group-count')
+    .evaluate((el) =>
+      Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {}))),
+    );
+
+  return group(page, key).evaluate((el) => {
+    const token = (name) => {
+      const probe = document.createElement('span');
+      probe.style.color = `var(${name})`;
+      el.append(probe);
+      const value = getComputedStyle(probe).color;
+      probe.remove();
+      return value;
+    };
+
+    return {
+      left: getComputedStyle(el.querySelector('.gc-have')).color,
+      right: getComputedStyle(el.querySelector('.gc-total')).color,
+      crowned: !el.querySelector('.gc-crown').hidden,
+      label: el.querySelector('.group-count').getAttribute('aria-label'),
+      muted: token('--muted'),
+      green: token('--owned-ink'),
+      gold: token('--maxed-ink'),
+    };
+  });
+}
+
 const tileIds = (page) =>
   page.locator('.tile').evaluateAll((els) => els.map((e) => e.dataset.id));
 
@@ -149,7 +189,9 @@ await check('a group heading names the sprite, its rarity and its power', async 
   const water = group(page, 'water');
   equal(await water.locator('.group-name').textContent(), 'Water Sprite');
   equal(await water.locator('.rarity').textContent(), 'Rare');
-  equal(await water.locator('.group-count').textContent(), '0 / 6');
+  // innerText, not textContent: the counter also holds the mastery crown, which
+  // is display:none until something in the group is crowned.
+  equal(await water.locator('.group-count').innerText(), '0 / 6');
   equal(
     await water.locator('.group-power').textContent(),
     'Replenish shields while standing in water!',
@@ -211,49 +253,57 @@ await check('progress counts owned and maxed separately', async () => {
 });
 
 await check('a group heading tracks its own sprite', async () => {
-  equal(await group(page, 'water').locator('.group-count').textContent(), '1 / 6');
-  equal(await group(page, 'fire').locator('.group-count').textContent(), '0 / 7');
+  equal(await group(page, 'water').locator('.group-count').innerText(), '1 / 6');
+  equal(await group(page, 'fire').locator('.group-count').innerText(), '0 / 7');
 });
 
-await check('the heading goes gold as soon as anything in it is mastered', async () => {
-  // Nothing mastered in Water yet — Earth has one.
-  equal(await group(page, 'water').getAttribute('data-maxed'), 'none');
-  equal(await group(page, 'earth').getAttribute('data-maxed'), 'some');
+await check('collecting climbs the counter; mastering marks it', async () => {
+  // Where the taps above left things: one of six Water collected and none of
+  // them crowned, one of Earth's collected and crowned, Fire untouched.
+  const water = await counterInk(page, 'water');
+  equal(await group(page, 'water').getAttribute('data-progress'), 'partial');
+  equal(water.left, water.green, 'the half that moved is the half that colours');
+  equal(water.right, water.muted, 'a total is not an achievement');
+  equal(water.crowned, false);
+  equal(water.label, '1 of 6 collected');
 
-  // Mastering every variant of a sprite is the state that earns both halves.
-  for (const id of ['johnwick', 'pollo']) {
-    await tile(page, id).click();
-    await tile(page, id).click();
-  }
+  const earth = await counterInk(page, 'earth');
+  equal(
+    await group(page, 'earth').getAttribute('data-progress'),
+    'partial',
+    'one crowned variant out of several is still one variant out of several',
+  );
+  equal(earth.left, earth.green);
+  equal(earth.right, earth.muted, 'the number that did not move stays put');
+  equal(earth.crowned, true, 'the crown is what carries mastery instead');
+  assert(earth.label.endsWith(', 1 mastered'), `crown reaches a screen reader: ${earth.label}`);
 
-  equal(await group(page, 'johnwick').getAttribute('data-maxed'), 'all');
-  equal(await group(page, 'pollo').getAttribute('data-maxed'), 'all');
+  const fire = await counterInk(page, 'fire');
+  equal(await group(page, 'fire').getAttribute('data-progress'), 'none');
+  equal(fire.left, fire.muted);
+  equal(fire.right, fire.muted);
 
-  // The data attribute is only half of it — a CSS rule has to actually win.
-  // "All collected" paints the left number green, and all-mastered has to beat
-  // it, which is a specificity fight that loses silently.
-  const colours = await group(page, 'johnwick').evaluate((el) => {
-    // Resolve the --maxed token through the browser so the comparison is
-    // against whatever the theme actually paints, not a hardcoded hex.
-    const probe = document.createElement('span');
-    probe.style.color = 'var(--maxed)';
-    el.append(probe);
-    const gold = getComputedStyle(probe).color;
-    probe.remove();
+  // John Wick has one variant, so a tap completes him and a second masters him.
+  // Every rung has to actually beat the one below it in the cascade, which is a
+  // fight that loses silently.
+  await tile(page, 'johnwick').click();
+  const complete = await counterInk(page, 'johnwick');
+  equal(await group(page, 'johnwick').getAttribute('data-progress'), 'complete');
+  equal(complete.left, complete.green, 'left half of a complete counter');
+  equal(complete.right, complete.green, 'and the total with it — the set is whole');
+  equal(complete.crowned, false);
 
-    return {
-      left: getComputedStyle(el.querySelector('.gc-have')).color,
-      right: getComputedStyle(el.querySelector('.gc-total')).color,
-      gold,
-    };
-  });
+  await tile(page, 'johnwick').click();
+  const mastered = await counterInk(page, 'johnwick');
+  equal(await group(page, 'johnwick').getAttribute('data-progress'), 'mastered');
+  equal(mastered.left, mastered.gold, 'left half of an all-mastered counter');
+  equal(mastered.right, mastered.gold, 'right half of an all-mastered counter');
+  equal(mastered.crowned, true);
+  equal(mastered.label, '1 of 1 collected, 1 mastered');
 
-  equal(colours.left, colours.gold, 'left half of an all-mastered counter');
-  equal(colours.right, colours.gold, 'right half of an all-mastered counter');
-
-  // Put them back so the counts the later sync checks rely on still hold.
-  for (const id of ['johnwick', 'pollo']) await tile(page, id).click();
-  equal(await group(page, 'johnwick').getAttribute('data-maxed'), 'none');
+  // Put him back so the counts the later sync checks rely on still hold.
+  await tile(page, 'johnwick').click();
+  equal(await group(page, 'johnwick').getAttribute('data-progress'), 'none');
 });
 
 await check('the maxed tile shows a crown mark', async () => {
@@ -568,6 +618,29 @@ await check('the installed copy is not asked to install itself', async () => {
   assert(await app.locator('#installSteps').isHidden());
 
   await installed.close();
+});
+
+await check('a first run takes the palette from the device, not a fixed default', async () => {
+  const night = await newPage({ colorScheme: 'dark' });
+  await night.goto(base);
+  await night.waitForSelector('.tile');
+
+  equal(await night.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  equal(
+    await night.locator('[data-theme-set="system"]').getAttribute('aria-pressed'),
+    'true',
+    'and the menu says which one is doing the choosing',
+  );
+
+  // Picking one is still a decision: it sticks, and it outranks the device.
+  await night.locator('#menuBtn').click();
+  await night.waitForSelector('#menu[open]');
+  await night.locator('[data-theme-set="light"]').click();
+  await night.reload();
+  await night.waitForSelector('.tile');
+  equal(await night.evaluate(() => document.documentElement.dataset.theme), 'light');
+
+  await night.context().close();
 });
 
 /* ------------------------- two-device sync ------------------------------ */

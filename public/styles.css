@@ -39,6 +39,14 @@
   --hunting: #d9531a;
   --danger: #d11f52;
 
+  /* Text-weight twins of the two achievement colours. The pair above is tuned
+     for fills, borders and a 15px mark on a tinted tile; as 12.5px type on the
+     pink ground they land at 3.8:1 and 3.5:1, under AA. Same hue, darkened
+     until they clear it (5.0:1 and 4.7:1) — the derivation keeps them following
+     the originals if those are ever re-tuned. */
+  --owned-ink: color-mix(in srgb, var(--owned) 85%, #000);
+  --maxed-ink: color-mix(in srgb, var(--maxed) 85%, #000);
+
   /* Piñata paper — decorative only, never carries text. */
   --mane: #ff3d9a;
   --sky: #5fcfe8;
@@ -87,6 +95,11 @@
   --maxed: #ffc53d;
   --hunting: #ff8a4d;
   --danger: #ff6b8a;
+
+  /* Nothing to darken here: on plum both already read at ~10:1 as small text,
+     and taking them down would only pull them towards the background. */
+  --owned-ink: var(--owned);
+  --maxed-ink: var(--maxed);
 
   --r-rare: #63c8ff;
   --r-epic: #c79bff;
@@ -526,24 +539,49 @@ body.compact .tile-hunt { width: 22px; height: 22px; }
   font-variant-numeric: tabular-nums;
 }
 
-/*
- * The heading's counter carries two facts at once.
- *
- * The left number is your progress: green once you hold every variant. The
- * right number is the prize: gold the moment any one of them is mastered, so
- * scrolling the list shows you where you have already crowned something. When
- * the whole sprite is mastered the counter goes gold end to end, which is the
- * only state that earns both numbers.
- */
-.group[data-done='true'] .gc-have { color: var(--owned); }
-.group[data-maxed='some'] .gc-total,
-.group[data-maxed='all'] .gc-total { color: var(--maxed); }
+/* Named as a list so the parts move together: the left number carries its own
+   colour on the `partial` rung below, and on its own it would snap while the
+   rest of the counter faded around it. */
+.group-count,
+.group-count > span { transition: color 0.2s ease; }
 
-/* Last, and matching .gc-have specifically: all-mastered means the whole
-   counter is gold, and it has to beat the green that "all collected" just put
-   on the left number — every mastered sprite is also a collected one. */
-.group[data-maxed='all'] .group-count,
-.group[data-maxed='all'] .gc-have { color: var(--maxed); }
+/*
+ * The heading's counter answers one question — how far into this sprite am I —
+ * and answers it on one ladder, in ascending order:
+ *
+ *   none      nothing yet         both halves muted
+ *   partial   some collected      the left number greens. It is the half that
+ *                                 moved, and it is the count of what you hold,
+ *                                 so it is the half that should carry the
+ *                                 colour of holding things
+ *   complete  every variant       the whole counter greens, so "5 / 6" and
+ *                                 "6 / 6" cannot be confused at a glance
+ *   mastered  every one crowned   the whole counter golds
+ *
+ * The rungs are values of ONE attribute, so exactly one rule can match and the
+ * order they are written in does not decide anything. The previous pair of
+ * attributes could and did produce nonsense in the middle — a grey "1" beside a
+ * gold "6", gold on the one number in the row that never changes and had
+ * nothing mastered about it.
+ *
+ * Mastering some of a sprite is a real thing to see from the top of the group,
+ * but it is not a rung: it says nothing about how much of the set you hold. It
+ * gets .gc-crown below instead — a mark that appears, rather than a colour that
+ * moves, so it cannot fight the ladder and does not depend on telling gold from
+ * green.
+ */
+.group[data-progress='partial'] .gc-have { color: var(--owned-ink); }
+.group[data-progress='complete'] .group-count { color: var(--owned-ink); }
+.group[data-progress='mastered'] .group-count { color: var(--maxed-ink); }
+
+/* Ahead of the numbers, not after them: every total is a single digit, so the
+   counters form a flush-right column down the page, and a mark on the outside
+   is one that never shunts that column sideways. */
+.gc-crown {
+  margin-right: 4px;
+  font-size: 11px;
+  color: var(--maxed-ink);
+}
 
 .group-power {
   flex-basis: 100%;

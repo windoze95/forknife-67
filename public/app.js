@@ -17,6 +17,7 @@ import {
   emptyDoc,
   countsFor,
   groupCounts,
+  groupTier,
   catalogEntry,
   customIds,
   nextCustomId,
@@ -39,7 +40,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.3.0';
+const APP_VERSION = '2.4.0';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -55,7 +56,11 @@ let ui = {
   filter: 'all',
   query: '',
   compact: false,
-  theme: 'light',
+  // Follow the device unless the player says otherwise: someone who runs their
+  // phone dark is checking a chest in a dark room, and a white screen there is
+  // the app's own fault. Anyone who picks Light or Dark keeps it on every load,
+  // and it syncs nowhere — a phone and a PC can disagree about this one.
+  theme: 'system',
   syncCode: '',
   lastSync: 0,
   installDismissed: false,
@@ -364,14 +369,30 @@ function repaintGroupCount(section) {
   if (!section) return;
 
   const ids = JSON.parse(section.dataset.all);
-  const { collected, maxed, total } = groupCounts(doc, ids.map((id) => ({ id })));
+  const counts = groupCounts(doc, ids.map((id) => ({ id })));
+  const { collected, maxed, total } = counts;
 
   section.querySelector('.gc-have').textContent = String(collected);
   section.querySelector('.gc-total').textContent = String(total);
 
-  section.dataset.done = String(collected === total);
-  // "some" the moment one variant is mastered, "all" only when every one is.
-  section.dataset.maxed = maxed === 0 ? 'none' : maxed === total ? 'all' : 'some';
+  // One value, four rungs — see `groupTier` and the block it drives in the CSS.
+  section.dataset.progress = groupTier(counts);
+
+  // A crown appearing, rather than a colour changing, is what says "there is
+  // something mastered in here": it reads the same to someone who cannot pull
+  // gold apart from green.
+  section.querySelector('.gc-crown').hidden = maxed === 0;
+
+  // The counter says more in colour than it does in text, and none of that
+  // reaches a screen reader. Spell it out — role="img" on the element means
+  // this label is read *instead of* "1 / 6", which would otherwise come out as
+  // "1 slash 6" and still be missing the crown.
+  section.querySelector('.group-count').setAttribute(
+    'aria-label',
+    maxed === 0
+      ? `${collected} of ${total} collected`
+      : `${collected} of ${total} collected, ${maxed} mastered`,
+  );
 }
 
 function groupSection(group) {
@@ -398,8 +419,12 @@ function groupSection(group) {
 
   const count = document.createElement('span');
   count.className = 'group-count';
-  // Two spans, because the halves colour independently.
-  count.innerHTML = '<span class="gc-have"></span> / <span class="gc-total"></span>';
+  count.setAttribute('role', 'img'); // labelled in repaintGroupCount
+  // Split into spans because the two halves colour independently. The crown is
+  // the tile's own mastery mark, so the heading and the grid cannot drift apart.
+  count.innerHTML =
+    `<span class="gc-crown" hidden>${MARK.maxed}</span>` +
+    '<span class="gc-have"></span> / <span class="gc-total"></span>';
   head.append(count);
 
   if (group.sprite?.power) {

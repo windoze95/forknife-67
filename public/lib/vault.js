@@ -353,8 +353,8 @@ export function countsFor(doc) {
 /**
  * Progress for one base sprite's group heading, e.g. "2 / 6".
  *
- * `maxed` is tracked separately from `collected` because the heading colours
- * them differently: mastering even one of a sprite's variants is worth seeing
+ * `maxed` is tracked separately from `collected` because the heading shows the
+ * two differently: mastering even one of a sprite's variants is worth seeing
  * from the top of the group.
  */
 export function groupCounts(doc, entries) {
@@ -368,6 +368,30 @@ export function groupCounts(doc, entries) {
   }
 
   return { collected, maxed, total: entries.length };
+}
+
+/**
+ * How far into a sprite you are, as one rung on a ladder:
+ *
+ *   none      nothing collected yet
+ *   partial   some of the variants
+ *   complete  every variant, none of them mastered — or only some
+ *   mastered  every variant, all of them mastered
+ *
+ * Each rung is strictly better than the one below it, so the heading built on
+ * this can only ever move forwards as a sprite fills in. That is the whole
+ * reason it is one value and not a set of independent flags: two flags produce
+ * combinations that have to be ranked *somewhere*, and doing it in CSS means
+ * ranking them by source order, silently.
+ *
+ * Mastering SOME variants is deliberately not a rung. It is not progress
+ * towards holding the set — you can master your only one of seven — so it is
+ * shown as a separate mark rather than folded in here.
+ */
+export function groupTier({ collected, maxed, total }) {
+  if (total <= 0 || collected <= 0) return 'none';
+  if (collected < total) return 'partial';
+  return maxed === total ? 'mastered' : 'complete';
 }
 
 /** Catalog metadata for an id, or null for custom and unknown entries. */

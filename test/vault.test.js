@@ -10,6 +10,7 @@ import {
   compactDoc,
   countsFor,
   groupCounts,
+  groupTier,
   customIds,
   nextCustomId,
   isBlankSprite,
@@ -325,9 +326,30 @@ test('group counts read against the whole sprite, not the current filter', () =>
   ]);
 
   const entries = RELEASED_ENTRIES.filter((entry) => entry.spriteKey === 'water');
-  // maxed is separate from collected: the heading colours the two halves of
-  // "2 / 6" on different rules.
+  // maxed is separate from collected: the heading marks the two differently.
   assert.deepEqual(groupCounts(doc, entries), { collected: 2, maxed: 1, total: 6 });
+});
+
+test('a group is on exactly one rung, whatever the counts', () => {
+  const tier = (collected, maxed, total) => groupTier({ collected, maxed, total });
+
+  assert.equal(tier(0, 0, 6), 'none');
+  assert.equal(tier(1, 0, 6), 'partial');
+  assert.equal(tier(5, 0, 6), 'partial');
+  assert.equal(tier(6, 0, 6), 'complete');
+
+  // Mastering does not move you along the ladder; only collecting does. One
+  // crowned variant out of six is the state the old two-flag version got
+  // visibly wrong, painting the total gold while progress stayed grey.
+  assert.equal(tier(1, 1, 6), 'partial', 'a crown is not progress towards the set');
+  assert.equal(tier(6, 5, 6), 'complete', 'one short of mastery is still complete');
+  assert.equal(tier(6, 6, 6), 'mastered');
+
+  // A single-variant sprite skips straight past partial, and an empty group
+  // (nothing in the catalog under it yet) is not a completed one.
+  assert.equal(tier(1, 0, 1), 'complete');
+  assert.equal(tier(1, 1, 1), 'mastered');
+  assert.equal(tier(0, 0, 0), 'none');
 });
 
 /* ---------------------------------------------------------------------- */
