@@ -40,7 +40,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.5.4';
+const APP_VERSION = '2.5.5';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -1037,6 +1037,21 @@ new IntersectionObserver(
   ([entry]) => $('toolbar').classList.toggle('is-stuck', !entry.isIntersecting),
   { threshold: 0 },
 ).observe($('stickySentinel'));
+
+/**
+ * The iOS half of turning zoom off.
+ *
+ * Safari has ignored `user-scalable=no` since iOS 10 and pinches the page
+ * regardless of `touch-action`, so on an iPhone — which is where this app is
+ * used — neither of the other two pieces lands. These events are WebKit's own,
+ * they are the only handle on that gesture, and refusing them is what stops it.
+ *
+ * Non-passive on purpose: a passive listener is not allowed to preventDefault,
+ * and browsers default touch-ish listeners to passive on the document.
+ */
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+}
 
 document.addEventListener('keydown', (event) => {
   if (event.target.matches('input, textarea')) {
