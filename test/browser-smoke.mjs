@@ -620,6 +620,34 @@ await check('the installed copy is not asked to install itself', async () => {
   await installed.close();
 });
 
+await check('the coming-back list can be waved away, until the news changes', async () => {
+  // Its own context: dismissing it here would take it out of every check and
+  // screenshot that follows.
+  const reader = await newPage();
+  await reader.goto(base);
+  await reader.waitForSelector('.tile');
+  assert(await reader.locator('#comingSoon').isVisible(), 'shown to start with');
+
+  await reader.locator('#soonDismiss').click();
+  assert(await reader.locator('#comingSoon').isHidden(), 'gone on the tap');
+
+  await reader.reload();
+  await reader.waitForSelector('.tile');
+  assert(await reader.locator('#comingSoon').isHidden(), 'and still gone after a reload');
+
+  // Dismissal is against what the section said, not the section itself. Age the
+  // stored key the way a new vaulting or a moved date would.
+  await reader.evaluate(() => {
+    const ui = JSON.parse(localStorage.getItem('forknife67.ui.v1'));
+    localStorage.setItem('forknife67.ui.v1', JSON.stringify({ ...ui, soonDismissed: 'oldnews:2020-01-01' }));
+  });
+  await reader.reload();
+  await reader.waitForSelector('.tile');
+  assert(await reader.locator('#comingSoon').isVisible(), 'new news has to get through');
+
+  await reader.context().close();
+});
+
 await check('a first run takes the palette from the device, not a fixed default', async () => {
   const night = await newPage({ colorScheme: 'dark' });
   await night.goto(base);

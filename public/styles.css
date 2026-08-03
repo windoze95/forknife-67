@@ -431,7 +431,9 @@ main { padding: 0 14px; }
 .install-bar-text { flex: 1; margin: 0; font-size: 13px; line-height: 1.35; }
 .install-bar .btn { flex: none; }
 
-.install-bar-close {
+/* Waving something away is the same gesture wherever it appears, so it is the
+   same control: the install nudge and the coming-back list share this one. */
+.dismiss {
   display: grid;
   place-items: center;
   flex: none;
@@ -445,7 +447,7 @@ main { padding: 0 14px; }
   cursor: pointer;
 }
 
-.install-bar-close:hover { color: var(--text); background: var(--surface-2); }
+.dismiss:hover { color: var(--text); background: var(--surface-2); }
 
 /* The sheet's header is sticky, so scrolling a panel to the top of the sheet
    would tuck its own heading underneath it. */
@@ -471,8 +473,18 @@ main { padding: 0 14px; }
   border-radius: var(--radius);
 }
 
+/* The button is taller than the label, so the row is sized by the button and
+   the padding above the section is trimmed to match — otherwise adding a way to
+   close the thing would make it grow. */
+.soon-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -4px -5px 5px 0;
+}
+
 .soon-title {
-  margin: 0 0 9px;
+  margin: 0;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.09em;

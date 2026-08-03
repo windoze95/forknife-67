@@ -40,7 +40,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.4.1';
+const APP_VERSION = '2.5.0';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -66,6 +66,8 @@ let ui = {
   syncCode: '',
   lastSync: 0,
   installDismissed: false,
+  // Which coming-back announcement was waved away, not merely that one was.
+  soonDismissed: '',
 };
 
 /** Snapshot of the sprite before the most recent change, for the Undo button. */
@@ -532,16 +534,32 @@ function applyTheme() {
 }
 
 /**
+ * What the coming-back section is currently announcing.
+ *
+ * Dismissal is remembered against this rather than as a plain flag, so waving
+ * away "Ironmouse, 4 August" does not also silence the next sprite Epic pulls,
+ * or a return date that moves. Anything that changes what the section would say
+ * brings it back; re-reading the same news does not.
+ */
+function comingSoonKey() {
+  return VAULTED_ENTRIES.map((entry) => `${entry.id}:${entry.returns || ''}`).join(',');
+}
+
+/**
  * The handful of entries that shipped, got pulled, and are due back.
  *
  * They are worth calling out rather than leaving greyed out somewhere down the
  * grid — knowing Ironmouse lands on the 4th is the kind of thing you check the
  * app for. The section removes itself once the catalog marks them live, so
  * nothing has to be cleaned up by hand afterwards.
+ *
+ * Once you have read it, it is just a banner above the thing you came for, so
+ * it can be waved away — see `comingSoonKey` for how long that lasts. The
+ * entries stay in the grid either way; this is the announcement, not the data.
  */
 function renderComingSoon() {
   const section = $('comingSoon');
-  section.hidden = VAULTED_ENTRIES.length === 0;
+  section.hidden = VAULTED_ENTRIES.length === 0 || ui.soonDismissed === comingSoonKey();
   if (section.hidden) return;
 
   const frag = document.createDocumentFragment();
@@ -583,6 +601,12 @@ function renderComingSoon() {
 $('soonList').addEventListener('click', (event) => {
   const item = event.target.closest('.soon-item');
   if (item) openDetail(item.dataset.id);
+});
+
+$('soonDismiss').addEventListener('click', () => {
+  ui.soonDismissed = comingSoonKey();
+  saveUi();
+  renderComingSoon();
 });
 
 function renderAll() {
