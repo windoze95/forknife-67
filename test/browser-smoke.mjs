@@ -198,6 +198,38 @@ await check('a group heading names the sprite, its rarity and its power', async 
   );
 });
 
+await check('the paper band hands off from the header to the pinned toolbar', async () => {
+  const bands = () =>
+    page.evaluate(() => {
+      const header = getComputedStyle(document.querySelector('.topbar'), '::after');
+      const toolbar = getComputedStyle(document.getElementById('toolbar'), '::before');
+      return {
+        stuck: document.getElementById('toolbar').classList.contains('is-stuck'),
+        paint: header.backgroundImage,
+        samePaint: header.backgroundImage === toolbar.backgroundImage,
+        shown: toolbar.opacity,
+      };
+    });
+
+  const rest = await bands();
+  equal(rest.stuck, false, 'nothing pinned at the top of the page');
+  equal(rest.shown, '0', "unstuck it sits under the header's own band, and two is one too many");
+  assert(rest.paint.includes('repeating-linear-gradient'), 'the header band is the gradient pair');
+  assert(rest.samePaint, 'drawn twice, so the two have to be the same paint');
+
+  await page.evaluate(() => window.scrollTo(0, 800));
+  await page.waitForFunction(() => document.getElementById('toolbar').classList.contains('is-stuck'));
+  // The band fades in; reading opacity mid-fade is a number between the two.
+  await page
+    .locator('#toolbar')
+    .evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {}))));
+
+  equal((await bands()).shown, '1', 'the toolbar takes the top of the screen, and the band with it');
+
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForFunction(() => !document.getElementById('toolbar').classList.contains('is-stuck'));
+});
+
 await check('every tile carries the sprite artwork', async () => {
   const shape = await tile(page, 'water.gold').locator('.tile-img').evaluate((el) => ({
     src: new URL(el.src).pathname,
