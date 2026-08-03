@@ -103,10 +103,15 @@ Object per vault; SQLite-backed objects support point-in-time recovery.
 
 **Things you may want to change**
 
-- **Sprite names.** Slots are numbered 1–111; there's no authoritative name list
-  baked in, deliberately. Rename individually, or paste a full list in
-  **Menu → Names**.
-- **The total.** **Menu → Total to find** when Epic adds more. Existing marks
-  are kept, and the change syncs across devices.
+- **Keeping the catalog current.** `public/lib/catalog.js` is a snapshot of a
+  live game, verified against patch v41.30. When Epic ships more sprites, add
+  them there and update the three counts at the top of
+  `test/catalog.test.js` — they fail on purpose, so the numbers can only move
+  deliberately. `fortnite.gg/sprites` is the source; its detail pages carry the
+  power text, spawn location, chest odds and dust cost for each entry.
+- **Before the catalog catches up**, **Menu → Add your own** tracks a sprite by
+  name the day it lands. It counts and syncs like any other entry.
+- **Unreleased entries** (currently 9, datamined but not obtainable) are hidden
+  until **Menu → Catalog → Show the unreleased ones**.
 
 How the app is built is in [`README.md`](README.md).

@@ -62,7 +62,7 @@
 
   <div class="progress">
     <div class="progress-head">
-      <strong id="progressCount">0 / 111</strong>
+      <strong id="progressCount">0 / 109</strong>
       <span class="progress-sub" id="progressSub">collected</span>
       <span class="spacer"></span>
       <span class="progress-pct" id="progressPct">0%</span>
@@ -82,7 +82,7 @@
         <i class="dot dot-hunting"></i><span id="legendHunting">0</span> hunting
       </button>
       <button type="button" class="legend-item" data-jump="needed">
-        <i class="dot dot-needed"></i><span id="legendNeeded">111</span> to find
+        <i class="dot dot-needed"></i><span id="legendNeeded">109</span> to find
       </button>
     </div>
   </div>
@@ -94,7 +94,7 @@
 <div class="toolbar" id="toolbar">
   <div class="search">
     <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
-    <input type="search" id="search" placeholder="Search number or name…" autocomplete="off"
+    <input type="search" id="search" placeholder="Gold Water, Grim, swim speed…" autocomplete="off"
            spellcheck="false" enterkeyhint="search" aria-label="Search sprites">
     <button type="button" class="search-clear" id="searchClear" hidden aria-label="Clear search">
       <svg aria-hidden="true"><use href="#i-close"/></svg>
@@ -117,7 +117,7 @@
 
   <p class="hint">
     Tap a tile to cycle <b>Needed → Owned → Maxed</b>. Tap the ring to flag one you're hunting.
-    Long-press (or the <b>i</b> button) for names and notes.
+    Long-press (or press <b>i</b>) for what it does, where it spawns and what it costs in dust.
   </p>
 </main>
 
@@ -129,18 +129,36 @@
       <button type="submit" class="icon-btn" aria-label="Close"><svg aria-hidden="true"><use href="#i-close"/></svg></button>
     </div>
 
+    <div class="detail-meta" id="detailMeta" hidden>
+      <div class="detail-badges">
+        <span class="rarity" id="detailRarity" data-rarity="rare">Rare</span>
+        <span class="variant-tag" id="detailVariant" hidden></span>
+        <span class="tag-warn" id="detailUnreleased" hidden>Not released yet</span>
+      </div>
+
+      <p class="detail-power" id="detailPower"></p>
+
+      <dl class="facts">
+        <div class="fact" hidden><dt>Variant bonus</dt><dd id="factPerk"></dd></div>
+        <div class="fact" hidden><dt>At each level</dt><dd id="factScaling"></dd></div>
+        <div class="fact" hidden><dt>Where to look</dt><dd id="factWhere"></dd></div>
+        <div class="fact" hidden><dt>Chest odds</dt><dd id="factDrop"></dd></div>
+        <div class="fact" hidden><dt>Summon cost</dt><dd id="factDust"></dd></div>
+      </dl>
+    </div>
+
     <div class="status-picker" role="radiogroup" aria-label="Status">
       <button type="button" class="status-opt" data-status="needed" role="radio" aria-checked="false">
         <svg aria-hidden="true"><use href="#i-target"/></svg>
-        <b>Needed</b><small>Not in my inventory</small>
+        <b>Needed</b><small>Not in my collection</small>
       </button>
       <button type="button" class="status-opt" data-status="owned" role="radio" aria-checked="false">
         <svg aria-hidden="true"><use href="#i-check"/></svg>
-        <b>Owned</b><small>Have it, no crown in game</small>
+        <b>Owned</b><small>Extracted, not mastered</small>
       </button>
       <button type="button" class="status-opt" data-status="maxed" role="radio" aria-checked="false">
         <svg aria-hidden="true"><use href="#i-crown"/></svg>
-        <b>Maxed</b><small>Crowned in game</small>
+        <b>Maxed</b><small>Mastered, so it wears a crown</small>
       </button>
     </div>
 
@@ -150,15 +168,17 @@
       <span class="switch-label">On my hunting list</span>
     </label>
 
-    <label class="field">
-      <span class="field-label">Name <small>(optional)</small></span>
-      <input type="text" id="detailName" maxlength="60" placeholder="e.g. the little blue one" autocomplete="off">
+    <label class="field" id="detailNameField" hidden>
+      <span class="field-label">Name</span>
+      <input type="text" id="detailName" maxlength="60" placeholder="e.g. Ironmouse Sprite" autocomplete="off">
     </label>
 
     <label class="field">
-      <span class="field-label">Notes <small>(where you saw it, level, trade)</small></span>
-      <textarea id="detailNotes" maxlength="500" rows="3" placeholder="Found near Ranger's Ruin, level 3…"></textarea>
+      <span class="field-label">Notes <small>(level, who has it, where you saw it)</small></span>
+      <textarea id="detailNotes" maxlength="500" rows="3" placeholder="Level 3, squadmate has the Gold one…"></textarea>
     </label>
+
+    <button type="button" class="btn danger-ghost detail-delete" id="detailDelete" hidden>Delete this entry</button>
 
     <div class="sheet-nav">
       <button type="button" class="btn ghost" id="detailPrev">‹ Prev</button>
@@ -179,20 +199,25 @@
     <section class="panel callout">
       <h3>How this works</h3>
       <p>
-        In game you can only tell a sprite is already yours when it's <b>maxed</b> —
-        that's the one wearing a crown. Everything you own <i>below</i> max looks
-        identical to one you've never found, so this list is your only record.
+        In game you can only tell a sprite is already yours once it's <b>mastered</b> —
+        that's the one wearing a crown. Everything you've extracted <i>below</i> max
+        looks identical to one you've never found, so this list is your only record.
       </p>
       <p>Mark a sprite the moment you extract it and the guessing stops.</p>
     </section>
 
     <section class="panel">
-      <h3>Sprites in game</h3>
-      <label class="field row">
-        <span class="field-label">Total to find</span>
-        <input type="number" id="totalInput" min="1" max="2000" step="1" inputmode="numeric">
+      <h3>Catalog</h3>
+      <p class="muted">
+        <b><span id="catalogSize">109</span> sprites and variants</b>, read from the game files and
+        checked against Epic's <span id="catalogPatch">v41.30</span> notes.
+      </p>
+      <label class="switch">
+        <input type="checkbox" id="unreleasedToggle">
+        <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
+        <span class="switch-label">Show the <span id="catalogUnreleased">9</span> unreleased ones</span>
       </label>
-      <p class="muted">Epic adds more over time — bump this and new slots appear. Nothing you've already tracked is lost.</p>
+      <p class="muted">Datamined but not obtainable yet. Off by default so your total means what you think it means.</p>
     </section>
 
     <section class="panel">
@@ -215,12 +240,11 @@
     </section>
 
     <section class="panel">
-      <h3>Names</h3>
-      <p class="muted">Paste a list of sprite names — one per line, in order — to label every slot at once.</p>
-      <textarea id="bulkNames" rows="4" placeholder="Ember&#10;Glimmer&#10;Thistle&#10;…"></textarea>
-      <div class="btn-row">
-        <button type="button" class="btn" id="bulkApply">Apply names</button>
-        <button type="button" class="btn ghost" id="bulkLoad">Load current</button>
+      <h3>Add your own</h3>
+      <p class="muted">Epic ships sprites faster than this app updates. Add one by name and track it today — it counts and syncs like any other.</p>
+      <div class="code-row">
+        <input type="text" id="customName" maxlength="60" placeholder="Ironmouse Sprite" autocomplete="off" aria-label="New entry name">
+        <button type="button" class="btn" id="addCustom">Add</button>
       </div>
     </section>
 

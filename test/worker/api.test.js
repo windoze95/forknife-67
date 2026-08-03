@@ -16,13 +16,16 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 let child;
+let stateDir;
 let base = process.env.BASE_URL || '';
 
 /** Ask the OS for a port, then let go of it, so wrangler can bind it. */
@@ -71,9 +74,21 @@ before(async () => {
   // teardown reliable — macOS tolerated the sloppier version, Linux did not.
   const wrangler = path.join(REPO_ROOT, 'node_modules', '.bin', 'wrangler');
 
+  // Durable Object storage is persisted to disk, and wrangler's default is a
+  // directory inside the repo that outlives the run. Sharing it between runs
+  // means yesterday's vaults show up in today's assertions, so every run gets
+  // an empty one of its own.
+  stateDir = await fs.mkdtemp(path.join(os.tmpdir(), 'forknife-wrangler-'));
+
   child = spawn(
     wrangler,
-    ['dev', '--port', String(port), '--inspector-port', '0', '--log-level', 'warn'],
+    [
+      'dev',
+      '--port', String(port),
+      '--inspector-port', '0',
+      '--log-level', 'warn',
+      '--persist-to', stateDir,
+    ],
     {
       cwd: REPO_ROOT,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -124,10 +139,20 @@ async function stopWrangler() {
   child.stderr?.destroy();
 }
 
-after(stopWrangler);
+after(async () => {
+  await stopWrangler();
+  // Only after workerd is gone, or it would rewrite the SQLite files on exit.
+  if (stateDir) await fs.rm(stateDir, { recursive: true, force: true });
+});
 
 const CODE_A = 'ABCDEFGH12345678';
 const CODE_B = 'ZYXWVTSR98765432';
+
+/** A dozen real catalog ids, for the concurrency test. */
+const IDS = [
+  'water', 'water.gold', 'earth', 'fire.holofoil', 'fishy', 'air.gummy',
+  'duck', 'ghost.galaxy', 'dream', 'punk.cube', 'grim', 'zeropoint.quack',
+];
 
 function put(code, body) {
   return fetch(`${base}/api/vault/${code}`, {
@@ -152,10 +177,14 @@ test('serves the app shell', async () => {
   assert.match(await res.text(), /forknife/i);
 });
 
-test('serves the shared vault module the browser imports', async () => {
-  const res = await fetch(`${base}/lib/vault.js`);
-  assert.equal(res.status, 200);
-  assert.match(res.headers.get('content-type'), /javascript/);
+test('serves the shared modules the browser imports', async () => {
+  // vault.js imports catalog.js, so a deploy that ships one without the other
+  // leaves the app a blank page.
+  for (const file of ['/lib/vault.js', '/lib/catalog.js']) {
+    const res = await fetch(`${base}${file}`);
+    assert.equal(res.status, 200, file);
+    assert.match(res.headers.get('content-type'), /javascript/, file);
+  }
 });
 
 test('_headers restores the hardening the Node server applied in code', async () => {
@@ -166,12 +195,15 @@ test('_headers restores the hardening the Node server applied in code', async ()
   assert.match(res.headers.get('content-security-policy'), /default-src 'self'/);
 });
 
-test('never serves the app shell from cache-forever headers', async () => {
-  const shell = await fetch(`${base}/`);
-  assert.match(shell.headers.get('cache-control'), /no-cache/);
-
-  const sw = await fetch(`${base}/sw.js`);
-  assert.match(sw.headers.get('cache-control'), /no-cache/, 'a cached SW would freeze deploys');
+test('never serves any part of the shell from cache-forever headers', async () => {
+  // No filename carries a content hash, so every piece of the shell has to
+  // revalidate together. A cached app.js paired with a fresh index.html reads
+  // a document written by a schema it does not know and shows an empty
+  // collection — a worse failure than simply not updating.
+  for (const file of ['/', '/sw.js', '/app.js', '/styles.css', '/lib/vault.js', '/lib/catalog.js']) {
+    const res = await fetch(`${base}${file}`);
+    assert.match(res.headers.get('cache-control') || '', /no-cache/, `${file} may be served stale`);
+  }
 });
 
 test('_headers is configuration, not a public file', async () => {
@@ -206,45 +238,46 @@ test('GET on an unknown vault is a 404, not an empty vault', async () => {
 
 test('PUT stores a vault and GET returns it', async () => {
   const res = await put(CODE_A, {
-    total: 111,
-    sprites: { 14: { id: 14, status: 'owned', hunting: false, name: 'blue one', notes: '', updatedAt: 1000 } },
+    sprites: {
+      'water.gold': {
+        id: 'water.gold', status: 'owned', hunting: false, name: '', notes: 'squadmate has it', updatedAt: 1000,
+      },
+    },
   });
 
   assert.equal(res.status, 200);
-  assert.equal((await res.json()).sprites[14].status, 'owned');
+  assert.equal((await res.json()).sprites['water.gold'].status, 'owned');
 
   const stored = await (await fetch(`${base}/api/vault/${CODE_A}`)).json();
-  assert.equal(stored.sprites[14].name, 'blue one');
+  assert.equal(stored.sprites['water.gold'].notes, 'squadmate has it');
 });
 
 test('POST is accepted as an alias for PUT', async () => {
   const res = await fetch(`${base}/api/vault/PSTAAAAA11111111`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ total: 111, sprites: { 3: { id: 3, status: 'owned', updatedAt: 10 } } }),
+    body: JSON.stringify({ sprites: { fire: { id: 'fire', status: 'owned', updatedAt: 10 } } }),
   });
   assert.equal(res.status, 200);
 });
 
 test('two devices editing different sprites both survive a sync', async () => {
-  await put(CODE_B, { total: 111, sprites: { 1: { id: 1, status: 'owned', updatedAt: 100 } } });
+  await put(CODE_B, { sprites: { water: { id: 'water', status: 'owned', updatedAt: 100 } } });
   const merged = await (await put(CODE_B, {
-    total: 111,
-    sprites: { 2: { id: 2, status: 'maxed', updatedAt: 110 } },
+    sprites: { fire: { id: 'fire', status: 'maxed', updatedAt: 110 } },
   })).json();
 
-  assert.equal(merged.sprites[1].status, 'owned', 'the first device edit must not be clobbered');
-  assert.equal(merged.sprites[2].status, 'maxed');
+  assert.equal(merged.sprites.water.status, 'owned', 'the first device edit must not be clobbered');
+  assert.equal(merged.sprites.fire.status, 'maxed');
 });
 
 test('a stale device cannot overwrite a newer edit', async () => {
-  await put(CODE_B, { total: 111, sprites: { 5: { id: 5, status: 'maxed', updatedAt: 5000 } } });
+  await put(CODE_B, { sprites: { dream: { id: 'dream', status: 'maxed', updatedAt: 5000 } } });
   const merged = await (await put(CODE_B, {
-    total: 111,
-    sprites: { 5: { id: 5, status: 'needed', updatedAt: 4000 } },
+    sprites: { dream: { id: 'dream', status: 'needed', updatedAt: 4000 } },
   })).json();
 
-  assert.equal(merged.sprites[5].status, 'maxed');
+  assert.equal(merged.sprites.dream.status, 'maxed');
 });
 
 test('concurrent writes to one vault do not lose edits', async () => {
@@ -252,47 +285,57 @@ test('concurrent writes to one vault do not lose edits', async () => {
   // needed an explicit promise-chain lock; here it falls out of there being
   // exactly one single-threaded instance per vault.
   const code = 'CNCRRNT123456789';
-  const writes = [];
-
-  for (let i = 1; i <= 12; i += 1) {
-    writes.push(put(code, { total: 111, sprites: { [i]: { id: i, status: 'owned', updatedAt: 1000 + i } } }));
-  }
+  const writes = IDS.map((id, i) =>
+    put(code, { sprites: { [id]: { id, status: 'owned', updatedAt: 1000 + i } } }),
+  );
 
   await Promise.all(writes);
   const stored = await (await fetch(`${base}/api/vault/${code}`)).json();
 
-  for (let i = 1; i <= 12; i += 1) {
-    assert.equal(stored.sprites[i]?.status, 'owned', `sprite ${i} was lost in a concurrent write`);
+  for (const id of IDS) {
+    assert.equal(stored.sprites[id]?.status, 'owned', `${id} was lost in a concurrent write`);
   }
 });
 
 test('vaults are isolated from one another', async () => {
   const stored = await (await fetch(`${base}/api/vault/${CODE_A}`)).json();
-  assert.equal(stored.sprites[1], undefined, `${CODE_B}'s edits must not appear in ${CODE_A}`);
+  assert.equal(stored.sprites.water, undefined, `${CODE_B}'s edits must not appear in ${CODE_A}`);
 });
 
 test('untouched sprites are stripped before storage', async () => {
   const code = 'CMPACTAAAA111111';
   await put(code, {
-    total: 111,
     sprites: {
-      1: { id: 1, status: 'needed', hunting: false, name: '', notes: '', updatedAt: 10 },
-      2: { id: 2, status: 'owned', updatedAt: 10 },
+      water: { id: 'water', status: 'needed', hunting: false, name: '', notes: '', updatedAt: 10 },
+      fire: { id: 'fire', status: 'owned', updatedAt: 10 },
     },
   });
 
   const stored = await (await fetch(`${base}/api/vault/${code}`)).json();
-  assert.deepEqual(Object.keys(stored.sprites), ['2']);
+  assert.deepEqual(Object.keys(stored.sprites), ['fire']);
 });
 
-test('a raised total adds slots without losing data', async () => {
+test('an entry the server has never heard of is stored rather than dropped', async () => {
+  // A device on a newer catalog must not have its progress silently deleted by
+  // a server that has not been redeployed yet.
   // No I, L, O or U — CODE_ALPHABET leaves out the lookalike glyphs.
   const code = 'TVTAAAAA11111111';
-  await put(code, { total: 111, sprites: { 7: { id: 7, status: 'owned', updatedAt: 10 } } });
-  const grown = await (await put(code, { total: 150, sprites: {}, totalUpdatedAt: 20 })).json();
+  await put(code, { sprites: { seven: { id: 'seven', status: 'owned', updatedAt: 10 } } });
+  const merged = await (await put(code, {
+    sprites: { 'brandnew.holofoil': { id: 'brandnew.holofoil', status: 'maxed', updatedAt: 20 } },
+  })).json();
 
-  assert.equal(grown.total, 150);
-  assert.equal(grown.sprites[7].status, 'owned');
+  assert.equal(merged.sprites['brandnew.holofoil'].status, 'maxed');
+  assert.equal(merged.sprites.seven.status, 'owned');
+});
+
+test('the unreleased setting syncs like any other edit', async () => {
+  const code = 'SH0WVNRE1EASED00';
+  await put(code, { sprites: { grim: { id: 'grim', status: 'owned', updatedAt: 10 } } });
+  const merged = await (await put(code, { sprites: {}, unreleased: true, unreleasedAt: 50 })).json();
+
+  assert.equal(merged.unreleased, true);
+  assert.equal(merged.sprites.grim.status, 'owned');
 });
 
 test('malformed JSON and oversized bodies are refused', async () => {
@@ -306,7 +349,7 @@ test('malformed JSON and oversized bodies are refused', async () => {
   const huge = await fetch(`${base}/api/vault/${CODE_A}`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ total: 111, pad: 'x'.repeat(900 * 1024) }),
+    body: JSON.stringify({ sprites: {}, pad: 'x'.repeat(900 * 1024) }),
   }).catch(() => null);
 
   if (huge) assert.equal(huge.status, 413);

@@ -14,16 +14,19 @@ phone and your PC.
 
 ## What it does
 
-- **111 sprites** in a tappable grid (change the total in Menu when Epic adds more)
+- **All 109 sprites and variants**, named, grouped by base sprite, with each
+  sprite's power, rarity and where it spawns
 - **Three states**, cycled with a single tap:
-  - **Needed** — not in your inventory
-  - **Owned** — you have it, no crown in game, *invisible to you in game*
-  - **Maxed ♛** — crowned in game
+  - **Needed** — not in your collection
+  - **Owned** — extracted but not mastered, *invisible to you in game*
+  - **Maxed ♛** — mastered, so it wears a crown
 - **Hunting list** — flag the ones you're actively looking for; a sprite drops
   off the list automatically the moment you mark it found
-- **Search** by number, name or note; **filter** by any state
-- **Names and notes** per sprite, or paste a whole list to label all 111 at once
-- **Undo** on every change, because a mis-tap on a 4-column grid happens
+- **Search** by name, by what a sprite does, or by where it spawns; **filter**
+  by any state
+- **Chest odds and summon cost** on every entry, so "hunt it or buy it with
+  dust" is an answerable question
+- **Undo** on every change, because a mis-tap happens
 - **Works offline** — installable as a PWA, data lives on the device
 - **Optional cloud sync** — one vault code, no account, no email
 - Dark and light themes, compact grid mode
@@ -31,14 +34,30 @@ phone and your PC.
 ## Why "Owned" matters most
 
 "Maxed" you can already see in game. The state this app exists for is **Owned** —
-have it, not maxed, therefore indistinguishable in game from one you've never
-found. Mark a sprite the moment you extract it and the guessing stops.
+extracted, not mastered, therefore indistinguishable in game from one you've
+never found. Mark a sprite the moment you extract it and the guessing stops.
 
-## Sprite names
+## Where the sprite data comes from
 
-Slots are numbered 1–111 out of the box, because there's no authoritative name
-list baked in. Rename any sprite individually (long-press a tile), or paste a
-whole list in **Menu → Names** to label all of them at once.
+`public/lib/catalog.js` holds 25 base sprites and 118 entries, 109 of them
+released. Names, rarities, power text, level scaling, spawn locations, drop
+rates and dust costs are read out of the game files; Epic's patch notes are the
+second source.
+
+The two disagree on four names — the game says *Grim*, *Llama*, *Peely* and
+*Burnt Peanut* where the patch notes say *Grim Reaper*, *Lootin' Llama*, *Peeky
+Peely* and *TheBurntPeanut*. The game's spelling is what the app shows, and both
+are searchable, so it does not matter which one you know.
+
+Popular fan checklists get several of these names wrong, disagree with each
+other on the total (91, 109 and 111 are all in circulation) and misreport what
+the variants do. Two of `test/catalog.test.js`'s assertions exist to stop those
+numbers drifting back in.
+
+Epic ships sprites faster than this app redeploys, so **Menu → Add your own**
+tracks one the day it lands, and entry ids are derived from a stable key rather
+than a position — adding a sprite to the catalog can never scramble a
+collection anyone has already recorded.
 
 ## Running it locally
 
@@ -46,7 +65,7 @@ Node 22+. The app itself has no runtime dependencies.
 
 ```bash
 npm start           # http://localhost:8080 — plain Node, nothing to install
-npm test            # 39 unit + API tests
+npm test            # 63 unit, catalog + API tests
 npm run icons       # regenerate the PWA icons
 ```
 
@@ -55,10 +74,10 @@ To run the thing production actually runs:
 ```bash
 npm install         # wrangler, the only devDependency
 npm run dev:worker  # the Worker + Durable Object under workerd
-npm run test:worker # 20 contract tests against a real `wrangler dev`
+npm run test:worker # 21 contract tests against a real `wrangler dev`
 ```
 
-Browser end-to-end tests (24 checks, needs Chromium):
+Browser end-to-end tests (33 checks, needs Chromium):
 
 ```bash
 npm install --no-save playwright
@@ -67,7 +86,7 @@ node test/browser-smoke.mjs
 ```
 
 `BASE_URL` points that suite at anything already running, which is how the
-Worker gets the same 24 checks rather than a second suite that only rhymes
+Worker gets the same 33 checks rather than a second suite that only rhymes
 with them:
 
 ```bash
@@ -107,6 +126,7 @@ public/
   styles.css          all styling
   app.js              all behaviour
   lib/vault.js        data model + merge logic — shared by all three runtimes
+  lib/catalog.js      every sprite, variant and stat, read from the game files
   sw.js               offline service worker
   _headers            security + cache headers for the edge-served assets
 src/
@@ -123,8 +143,16 @@ externally visible contract by their test suites.
 
 ### Data model
 
-A sprite is `{id, name, status, hunting, notes, updatedAt}`. Untouched sprites
-aren't stored at all, so a fresh install syncs a few hundred bytes.
+An entry is `{id, name, status, hunting, notes, updatedAt}`, keyed by a catalog
+id: `water`, `water.gold`, `custom.3`. Ids come from the sprite's key rather
+than its position in the list, which is what lets the catalog grow with the
+game without disturbing anything already recorded. Untouched entries aren't
+stored at all, so a fresh install syncs a few hundred bytes.
+
+The vault validates the *shape* of an id, not membership of the catalog. A
+phone that hasn't picked up the latest deploy stores and syncs an entry it has
+never heard of untouched, rather than deleting progress made on a device that
+has.
 
 Everything is kept in `localStorage` first — the app is fully functional with
 the server switched off. Sync is strictly additive.
@@ -132,10 +160,10 @@ the server switched off. Sync is strictly additive.
 ### Sync
 
 Enter the same **vault code** on two devices and they converge. Merging is
-per-sprite last-write-wins on `updatedAt`, so marking #14 on your phone and #92
-on your PC keeps both edits — whole-document last-write-wins would silently
-drop one. `public/lib/vault.js` is imported by both the browser and the server,
-so the two can't disagree about what a merge means.
+per-entry last-write-wins on `updatedAt`, so marking Gold Water on your phone
+and Grim on your PC keeps both edits — whole-document last-write-wins would
+silently drop one. `public/lib/vault.js` is imported by both the browser and
+the server, so the two can't disagree about what a merge means.
 
 Server-side, a vault is one Durable Object addressed by `sha256(code)` — so the
 code itself is never stored or logged — holding the document in SQLite. There is
