@@ -722,8 +722,22 @@ await second.screenshot({ path: path.join(SHOT_DIR, '06-desktop-light.png') });
 /* ------------------------------- report --------------------------------- */
 
 await check('no uncaught console errors during the whole run', () => {
-  // A failed fetch while deliberately offline is expected and not a defect.
-  const real = consoleErrors.filter((line) => !/sync failed|Failed to fetch|net::ERR_INTERNET_DISCONNECTED/i.test(line));
+  const ignorable = [
+    // A failed fetch while deliberately offline is expected, not a defect.
+    /sync failed|Failed to fetch|net::ERR_INTERNET_DISCONNECTED/i,
+    // Cloudflare injects its analytics beacon into HTML served on the custom
+    // domain, after the Worker has run and regardless of the zone's RUM
+    // setting being off. Our CSP blocks it, which is the correct outcome and
+    // exactly why it logs. Nothing we ship references it, and there is no
+    // setting in the dashboard that stops it — so when BASE_URL points at
+    // production this is the one error that is not ours.
+    //
+    // Matched by host, not by "CSP violation": a violation caused by our own
+    // code still has to fail this check.
+    /static\.cloudflareinsights\.com/i,
+  ];
+
+  const real = consoleErrors.filter((line) => !ignorable.some((re) => re.test(line)));
   assert(real.length === 0, `console errors:\n${real.join('\n')}`);
 });
 
