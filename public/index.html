@@ -131,13 +131,18 @@
     <svg class="install-bar-icon" aria-hidden="true"><use href="#i-install"/></svg>
     <p class="install-bar-text" id="installBarText">Keep it a tap away — add it to your home screen.</p>
     <button type="button" class="btn primary" id="installBarAction">Install</button>
-    <button type="button" class="install-bar-close" id="installDismiss" aria-label="Not now">
+    <button type="button" class="dismiss" id="installDismiss" aria-label="Not now">
       <svg aria-hidden="true"><use href="#i-close"/></svg>
     </button>
   </aside>
 
   <section class="soon" id="comingSoon" hidden aria-labelledby="soonTitle">
-    <h2 class="soon-title" id="soonTitle">Coming back</h2>
+    <div class="soon-head">
+      <h2 class="soon-title" id="soonTitle">Coming back</h2>
+      <button type="button" class="dismiss" id="soonDismiss" aria-label="Hide what's coming back">
+        <svg aria-hidden="true"><use href="#i-close"/></svg>
+      </button>
+    </div>
     <div class="soon-list" id="soonList"></div>
   </section>
 
