@@ -405,8 +405,8 @@ main { padding: 0 14px; }
 .grid { display: flex; flex-direction: column; gap: 20px; }
 
 body.compact { --tile: 48px; }
-body.compact .tile { min-height: 62px; }
-body.compact .tile-main { padding: 24px 3px 7px; }
+body.compact .tile { min-height: 66px; }
+body.compact .tile-main { padding: 18px 3px 6px; }
 body.compact .tile-hunt { width: 22px; height: 22px; }
 
 .group-head {
@@ -472,7 +472,7 @@ body.compact .group-power { display: none; }
   position: relative;
   /* Not square: the top strip belongs to the mark and the hunt ring, and the
      name needs the room below them. See .tile-hunt for why the height matters. */
-  min-height: 68px;
+  min-height: 80px;
   color: var(--text);
   background: var(--surface);
   border: 1.5px solid var(--line);
@@ -490,7 +490,7 @@ body.compact .group-power { display: none; }
   gap: 2px;
   width: 100%;
   height: 100%;
-  padding: 28px 4px 9px;
+  padding: 22px 4px 8px;
   font: inherit;
   color: inherit;
   text-align: center;
@@ -506,6 +506,18 @@ body.compact .group-power { display: none; }
 .tile:has(.tile-main:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
 .tile-main:focus-visible { outline: none; }
 
+/* Epic's own icon, 96px source drawn at 34. Recognising the creature you just
+   picked up is faster than reading its variant name. */
+.tile-img {
+  width: 34px;
+  height: 34px;
+  margin-bottom: 1px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+body.compact .tile-img { width: 26px; height: 26px; }
+
 /* "Holofoil" is the longest label and has to survive the narrowest tile. */
 .tile-label {
   max-width: 100%;
@@ -518,11 +530,10 @@ body.compact .group-power { display: none; }
 
 body.compact .tile-label { font-size: 10px; }
 
-/* Datamined but not obtainable — dashed, so it never reads as merely missing. */
-.tile[data-unreleased='true'] {
-  border-style: dashed;
-  opacity: 0.72;
-}
+/* Not obtainable — dashed, so it never reads as merely missing. Vaulted ones
+   are coming back, so they stay more present than the never-released ones. */
+.tile[data-state='vaulted'] { border-style: dashed; opacity: 0.85; }
+.tile[data-state='datamined'] { border-style: dashed; opacity: 0.62; }
 
 .tile-mark {
   position: absolute;
@@ -672,6 +683,14 @@ body.compact .tile-label { font-size: 10px; }
 /* Detail sheet — what the sprite does, and everything you'd otherwise go and
    look up on a wiki mid-match. */
 .detail-meta { margin-bottom: 18px; }
+
+.detail-art {
+  display: block;
+  width: 72px;
+  height: 72px;
+  margin-bottom: 10px;
+  object-fit: contain;
+}
 
 .detail-badges {
   display: flex;

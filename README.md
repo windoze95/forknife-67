@@ -14,8 +14,8 @@ phone and your PC.
 
 ## What it does
 
-- **All 109 sprites and variants**, named, grouped by base sprite, with each
-  sprite's power, rarity and where it spawns
+- **All 109 sprites and variants**, named and pictured, grouped by base sprite,
+  with each sprite's power, rarity and where it spawns
 - **Three states**, cycled with a single tap:
   - **Needed** — not in your collection
   - **Owned** — extracted but not mastered, *invisible to you in game*
@@ -40,14 +40,38 @@ never found. Mark a sprite the moment you extract it and the guessing stops.
 ## Where the sprite data comes from
 
 `public/lib/catalog.js` holds 25 base sprites and 118 entries, 109 of them
-released. Names, rarities, power text, level scaling, spawn locations, drop
-rates and dust costs are read out of the game files; Epic's patch notes are the
-second source.
+obtainable. Names, rarities, power text, level scaling, spawn locations, drop
+rates and dust costs are read out of the game files; Epic's patch notes and
+IGN's checklist are the second sources.
 
-The two disagree on four names — the game says *Grim*, *Llama*, *Peely* and
-*Burnt Peanut* where the patch notes say *Grim Reaper*, *Lootin' Llama*, *Peeky
-Peely* and *TheBurntPeanut*. The game's spelling is what the app shows, and both
-are searchable, so it does not matter which one you know.
+### Why the published totals disagree
+
+You will see 109, 111 and 118 quoted for the same season. All three are right,
+about different things:
+
+| Count | What it is |
+| ----- | ---------- |
+| **109** | Obtainable right now. What the app tracks, and what every source agrees on. |
+| **111** | IGN's figure — the 109 plus two that shipped and were pulled back. |
+| **118** | The game files — everything above plus seven variants that have never been released. |
+
+So the app keeps three states rather than a released flag. Ironmouse and Gem
+Grim went live on 30 July and were vaulted a day later for going out early;
+Ironmouse is back on 4 August, and the app says so on the entry. The other
+seven Gem variants have never shipped at all. Turn on **Menu → Catalog** to see
+them; the totals stay honest either way.
+
+IGN also counts "20 base Sprites", which is the 20 that have variant families —
+the five collab Mythics (Burnt Peanut, Vini Jr., Pollo, John Wick, Ironmouse)
+have none. 20 + 5 = the same 25 the game files list.
+
+### Names
+
+The game files and the patch notes disagree on four — the game says *Grim*,
+*Llama*, *Peely* and *Burnt Peanut* where the patch notes say *Grim Reaper*,
+*Lootin' Llama*, *Peeky Peely* and *TheBurntPeanut*. The game's spelling is what
+the app shows, and both are searchable, so it does not matter which one you
+know.
 
 Popular fan checklists get several of these names wrong, disagree with each
 other on the total (91, 109 and 111 are all in circulation) and misreport what
@@ -59,13 +83,34 @@ tracks one the day it lands, and entry ids are derived from a stable key rather
 than a position — adding a sprite to the catalog can never scramble a
 collection anyone has already recorded.
 
+### Keeping it current
+
+`.github/workflows/catalog-drift.yml` runs `tools/check-catalog-drift.js` daily.
+It reads IGN's checklist, resolves every sprite name it finds against the
+catalog, compares the totals, and files one issue when something doesn't line
+up. `test/drift.test.js` pins it at both ends — it has to catch a new sprite
+*and* a new variant of an existing one, and it must not fire on prose like
+"Master Sprites" or on a Mastery reward that happens to mention a number.
+
+**It detects; it never edits.** The catalog ships inside the app so the app
+works with no signal — that is the whole point of a tracker you use mid-match
+on mobile data — and a scraper writing to it unreviewed would publish whatever
+a wiki edit or a changed page layout produced, to someone with no way to notice
+it was wrong. Filling in a newly spotted sprite is a hand step, and needs a real
+browser: fortnite.gg refuses plain fetches *and* headless ones (403 both ways).
+
+Artwork is Epic's, re-hosted by fortnite.gg, fetched by
+`tools/fetch-sprite-art.js` and committed under `public/sprites/`. The 512px
+originals would be 3.2 MB; resized to 96px the whole set is 232 KB. Fan projects
+may use Epic's assets non-commercially under the Fan Content Policy.
+
 ## Running it locally
 
 Node 22+. The app itself has no runtime dependencies.
 
 ```bash
 npm start           # http://localhost:8080 — plain Node, nothing to install
-npm test            # 63 unit, catalog + API tests
+npm test            # 80 unit, catalog, drift + API tests
 npm run icons       # regenerate the PWA icons
 ```
 
@@ -77,7 +122,7 @@ npm run dev:worker  # the Worker + Durable Object under workerd
 npm run test:worker # 21 contract tests against a real `wrangler dev`
 ```
 
-Browser end-to-end tests (33 checks, needs Chromium):
+Browser end-to-end tests (34 checks, needs Chromium):
 
 ```bash
 npm install --no-save playwright
@@ -86,7 +131,7 @@ node test/browser-smoke.mjs
 ```
 
 `BASE_URL` points that suite at anything already running, which is how the
-Worker gets the same 33 checks rather than a second suite that only rhymes
+Worker gets the same 34 checks rather than a second suite that only rhymes
 with them:
 
 ```bash
@@ -127,13 +172,15 @@ public/
   app.js              all behaviour
   lib/vault.js        data model + merge logic — shared by all three runtimes
   lib/catalog.js      every sprite, variant and stat, read from the game files
+  sprites/            Epic artwork, one 96px webp per entry id
   sw.js               offline service worker
   _headers            security + cache headers for the edge-served assets
 src/
   worker.js           the deployed sync API
   vault-object.js     one Durable Object per vault
 server/server.js      the same API on plain Node, for local and LAN use
-test/                 unit, API, Worker and browser tests
+tools/                icon generation, artwork fetch, catalog drift check
+test/                 unit, catalog, drift, API, Worker and browser tests
 ```
 
 `public/lib/vault.js` is imported by the browser, the Worker and the Node
