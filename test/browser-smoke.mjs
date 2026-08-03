@@ -355,6 +355,31 @@ await check('collecting climbs the counter; mastering marks it', async () => {
   equal(await group(page, 'johnwick').getAttribute('data-progress'), 'none');
 });
 
+await check('two taps in the same place cycle a tile, they do not zoom the page', async () => {
+  const gestures = await page.evaluate(() => ({
+    tile: getComputedStyle(document.querySelector('.tile-main')).touchAction,
+    body: getComputedStyle(document.body).touchAction,
+    sheet: getComputedStyle(document.getElementById('detail')).touchAction,
+    notes: getComputedStyle(document.getElementById('detailNotes')).fontSize,
+    name: getComputedStyle(document.getElementById('detailName')).fontSize,
+    viewport: document.querySelector('meta[name="viewport"]').content,
+  }));
+
+  equal(gestures.tile, 'manipulation', 'the tap target itself, which is the one that counts');
+  equal(gestures.body, 'manipulation');
+  equal(gestures.sheet, 'manipulation', 'the sheets are in the top layer, out from under the body');
+
+  // The other zoom: iOS magnifies any field under 16px as it takes focus, and
+  // leaves you there.
+  equal(gestures.notes, '16px', 'notes field');
+  equal(gestures.name, '16px', 'name field');
+
+  assert(
+    !/user-scalable|maximum-scale/.test(gestures.viewport),
+    'pinch-zoom is deliberately still available — only the double-tap shortcut went',
+  );
+});
+
 await check('the maxed tile shows a crown mark', async () => {
   equal(await tile(page, 'earth').locator('.tile-mark').textContent(), '♛');
   equal(await tile(page, 'water').locator('.tile-mark').textContent(), '✓');

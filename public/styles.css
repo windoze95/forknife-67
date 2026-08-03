@@ -142,6 +142,25 @@ body {
   padding-bottom: calc(28px + var(--safe-bottom));
 }
 
+/**
+ * Getting a tile from Needed to Maxed is two taps in the same place, which a
+ * phone reads as "zoom in" — the grid lurches under your thumb halfway through
+ * marking something, on the app's single most-used gesture.
+ *
+ * Only the double-tap shortcut goes. Panning and pinch-zoom still work, which
+ * is the reason this is here and not `user-scalable=no` in the viewport meta:
+ * that would take zooming away from anyone who needs it, and iOS has ignored it
+ * since iOS 10 regardless.
+ *
+ * Declared on the document and again on the things that actually get tapped —
+ * the sheets render in the top layer, and a value on the tap target itself is
+ * the one that cannot be argued with.
+ */
+body,
+.sheet,
+button,
+.tile { touch-action: manipulation; }
+
 .svg-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
 
 svg { width: 1em; height: 1em; display: block; }
@@ -1004,7 +1023,9 @@ textarea {
   resize: vertical;
 }
 
-textarea { font-size: 15px; line-height: 1.5; }
+/* 16px, like the fields above it: iOS zooms into anything smaller the moment it
+   takes focus, and there is no gesture to zoom back out of that. */
+textarea { line-height: 1.5; }
 input::placeholder, textarea::placeholder { color: var(--muted); }
 
 /* Switch */
