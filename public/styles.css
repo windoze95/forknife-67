@@ -401,6 +401,53 @@ main { padding: 0 14px; }
   min-height: 18px;
 }
 
+/* A one-time nudge, shown only where there is actually a route to installing,
+   and gone for good once waved away. */
+.install-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 18px;
+  padding: 10px 10px 10px 13px;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.install-bar-icon { font-size: 21px; color: var(--accent); flex: none; }
+.install-bar-text { flex: 1; margin: 0; font-size: 13px; line-height: 1.35; }
+.install-bar .btn { flex: none; }
+
+.install-bar-close {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  font-size: 16px;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.install-bar-close:hover { color: var(--text); background: var(--surface-2); }
+
+/* The sheet's header is sticky, so scrolling a panel to the top of the sheet
+   would tuck its own heading underneath it. */
+#installPanel { scroll-margin-top: 74px; }
+
+.install-steps {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  font-size: 13.5px;
+  line-height: 1.9;
+}
+
+.install-steps b { font-weight: 700; }
+.install-steps .inline-icon { display: inline-block; vertical-align: -3px; font-size: 16px; }
+
 /* Sprites that shipped, got pulled, and are due back. Hides itself when the
    catalog says there are none, so it needs no tidying up afterwards. */
 .soon {

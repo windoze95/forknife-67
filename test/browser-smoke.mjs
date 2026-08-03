@@ -491,6 +491,85 @@ await check('never-released entries stay hidden until you ask for them', async (
   equal(await page.locator('#progressCount').textContent(), '3 / 110');
 });
 
+/* ------------------------------ install --------------------------------- */
+
+await check('the install panel reports where you stand', async () => {
+  await page.locator('#menuBtn').click();
+  await page.waitForSelector('#menu[open]');
+
+  equal(await page.locator('#installTag').textContent(), 'Not installed');
+  // Headless Chrome fires no beforeinstallprompt and is not iOS, so there is
+  // nothing to offer — and the app says so rather than showing a dead button.
+  assert(await page.locator('#installActions').isHidden(), 'no button without a prompt to replay');
+  assert(await page.locator('#installSteps').isHidden(), 'the Share steps are iOS-only');
+  assert(
+    (await page.locator('#installBlurb').textContent()).includes('own menu'),
+    'it should point at the browser menu instead',
+  );
+
+  await page.keyboard.press('Escape');
+  assert(await page.locator('#installBar').isHidden(), 'no nudge with no route to offer');
+});
+
+await check('an iPhone gets the Share steps, because it never fires the prompt', async () => {
+  // The case that matters most here and is easiest to leave broken: iOS Safari
+  // has no beforeinstallprompt at all, so a prompt-only implementation shows
+  // iPhone users nothing.
+  const ios = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 3,
+    isMobile: true,
+    hasTouch: true,
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+  });
+
+  const phone = await ios.newPage();
+  phone.on('pageerror', (err) => consoleErrors.push(`pageerror: ${err.message}`));
+  await phone.goto(base);
+  await phone.waitForSelector('.tile');
+
+  assert(await phone.locator('#installBar').isVisible(), 'the nudge should show');
+  equal(await phone.locator('#installBarAction').textContent(), 'How');
+
+  await phone.locator('#installBarAction').click();
+  await phone.waitForSelector('#menu[open]');
+  assert(await phone.locator('#installSteps').isVisible(), 'Share steps');
+  assert(await phone.locator('#installActions').isHidden(), 'nothing to prompt on iOS');
+  await phone.keyboard.press('Escape');
+
+  // Waving it away has to stick, or it becomes the thing you dismiss daily.
+  await phone.locator('#installDismiss').click();
+  assert(await phone.locator('#installBar').isHidden(), 'hidden after dismiss');
+
+  await phone.reload();
+  await phone.waitForSelector('.tile');
+  assert(await phone.locator('#installBar').isHidden(), 'still hidden after a reload');
+
+  await ios.close();
+});
+
+await check('the installed copy is not asked to install itself', async () => {
+  const installed = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  await installed.addInitScript(() => {
+    // Safari's flag for "launched from the home screen".
+    Object.defineProperty(navigator, 'standalone', { get: () => true });
+  });
+
+  const app = await installed.newPage();
+  await app.goto(base);
+  await app.waitForSelector('.tile');
+
+  assert(await app.locator('#installBar').isHidden(), 'no nudge once installed');
+  await app.locator('#menuBtn').click();
+  await app.waitForSelector('#menu[open]');
+  equal(await app.locator('#installTag').textContent(), 'Installed');
+  assert(await app.locator('#installActions').isHidden());
+  assert(await app.locator('#installSteps').isHidden());
+
+  await installed.close();
+});
+
 /* ------------------------- two-device sync ------------------------------ */
 
 let vaultCode = '';

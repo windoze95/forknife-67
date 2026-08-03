@@ -37,6 +37,14 @@
     <symbol id="i-close" viewBox="0 0 24 24">
       <path d="m6 6 12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
     </symbol>
+    <symbol id="i-share" viewBox="0 0 24 24">
+      <path d="M12 3v12M12 3 8.5 6.5M12 3l3.5 3.5" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M6.5 10.5H5.2A1.2 1.2 0 0 0 4 11.7v7.1A1.2 1.2 0 0 0 5.2 20h13.6a1.2 1.2 0 0 0 1.2-1.2v-7.1a1.2 1.2 0 0 0-1.2-1.2h-1.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+    </symbol>
+    <symbol id="i-install" viewBox="0 0 24 24">
+      <path d="M12 4v10M12 14l-3.6-3.6M12 14l3.6-3.6" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M4.5 17.5v1.3A1.2 1.2 0 0 0 5.7 20h12.6a1.2 1.2 0 0 0 1.2-1.2v-1.3" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+    </symbol>
     <symbol id="i-cloud" viewBox="0 0 24 24">
       <path d="M7 18a4 4 0 0 1-.5-7.97A5 5 0 0 1 16.5 9.2 3.9 3.9 0 0 1 17.5 18H7Z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/>
     </symbol>
@@ -111,6 +119,15 @@
 </div>
 
 <main>
+  <aside class="install-bar" id="installBar" hidden>
+    <svg class="install-bar-icon" aria-hidden="true"><use href="#i-install"/></svg>
+    <p class="install-bar-text" id="installBarText">Keep it a tap away — add it to your home screen.</p>
+    <button type="button" class="btn primary" id="installBarAction">Install</button>
+    <button type="button" class="install-bar-close" id="installDismiss" aria-label="Not now">
+      <svg aria-hidden="true"><use href="#i-close"/></svg>
+    </button>
+  </aside>
+
   <section class="soon" id="comingSoon" hidden aria-labelledby="soonTitle">
     <h2 class="soon-title" id="soonTitle">Coming back</h2>
     <div class="soon-list" id="soonList"></div>
@@ -211,6 +228,26 @@
         looks identical to one you've never found, so this list is your only record.
       </p>
       <p>Mark a sprite the moment you extract it and the guessing stops.</p>
+    </section>
+
+    <section class="panel" id="installPanel">
+      <h3><svg class="inline-icon" aria-hidden="true"><use href="#i-install"/></svg> Install <span class="tag" id="installTag">Not installed</span></h3>
+      <p class="muted" id="installBlurb">
+        Installed, it opens full screen from your home screen and works with no signal — which is
+        the point, since you'll be using it mid-match.
+      </p>
+
+      <div class="btn-row" id="installActions" hidden>
+        <button type="button" class="btn primary" id="installBtn">Add to home screen</button>
+      </div>
+
+      <!-- iOS never fires beforeinstallprompt, so the only route is Safari's
+           own Share sheet and the app has to say so. -->
+      <ol class="install-steps" id="installSteps" hidden>
+        <li>Tap <b>Share</b> <svg class="inline-icon" aria-hidden="true"><use href="#i-share"/></svg> in Safari's toolbar</li>
+        <li>Scroll down and tap <b>Add to Home Screen</b></li>
+        <li>Tap <b>Add</b></li>
+      </ol>
     </section>
 
     <section class="panel">
