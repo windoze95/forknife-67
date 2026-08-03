@@ -103,12 +103,18 @@ Object per vault; SQLite-backed objects support point-in-time recovery.
 
 **Things you may want to change**
 
-- **Keeping the catalog current.** `public/lib/catalog.js` is a snapshot of a
-  live game, verified against patch v41.30. When Epic ships more sprites, add
-  them there and update the three counts at the top of
-  `test/catalog.test.js` — they fail on purpose, so the numbers can only move
-  deliberately. `fortnite.gg/sprites` is the source; its detail pages carry the
-  power text, spawn location, chest odds and dust cost for each entry.
+- **Keeping the catalog current.** You should not have to watch for this: the
+  `Catalog drift` workflow checks daily and files one issue when the game moves
+  ahead of us. When it does, add the entries to `public/lib/catalog.js`, run
+  `node tools/fetch-sprite-art.js` for the artwork, and update the three counts
+  at the top of `test/catalog.test.js` — they fail on purpose, so the numbers
+  can only move deliberately.
+
+  `fortnite.gg/sprites` is the source for the hard data; its detail pages carry
+  the power text, spawn location, chest odds and dust cost. It refuses plain
+  fetches and headless browsers alike, so that step needs a real browser (or a
+  scraping service). IGN's sprite wiki is reachable without one and is the
+  better source for release news — vaultings, return dates.
 - **Before the catalog catches up**, **Menu → Add your own** tracks a sprite by
   name the day it lands. It counts and syncs like any other entry.
 - **Unreleased entries** (currently 9, datamined but not obtainable) are hidden

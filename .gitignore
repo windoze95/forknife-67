@@ -7,3 +7,6 @@ data/
 *.tmp
 .wrangler/
 .dev.vars*
+
+# Full-size source art, re-downloadable via tools/fetch-sprite-art.js
+.art-cache/

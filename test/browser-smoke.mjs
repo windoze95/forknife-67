@@ -133,6 +133,26 @@ await check('a group heading names the sprite, its rarity and its power', async 
   );
 });
 
+await check('every tile carries the sprite artwork', async () => {
+  const shape = await tile(page, 'water.gold').locator('.tile-img').evaluate((el) => ({
+    src: new URL(el.src).pathname,
+    loading: el.loading,
+    alt: el.alt,
+  }));
+
+  equal(shape.src, '/sprites/water.gold.webp');
+  equal(shape.loading, 'lazy', '109 eager images would be 109 requests on load');
+  equal(shape.alt, '', 'the name is already on the tile, so the image is decorative');
+
+  // A broken path renders an empty box, which the src assertion above would
+  // happily pass, so check the bytes actually arrived.
+  const ok = await page.evaluate(async () => {
+    const res = await fetch('/sprites/zeropoint.holofoil.webp');
+    return res.ok && res.headers.get('content-type') === 'image/webp';
+  });
+  assert(ok, 'sprite artwork is not being served');
+});
+
 await check('a tile is labelled by its variant, not repeating the sprite name', async () => {
   equal(await tile(page, 'water').locator('.tile-label').textContent(), 'Base');
   equal(await tile(page, 'water.gold').locator('.tile-label').textContent(), 'Gold');
@@ -384,7 +404,19 @@ await check('unreleased entries stay hidden until you ask for them', async () =>
 
   equal(await page.locator('#progressCount').textContent(), '3 / 119');
   equal(await tile(page, 'ironmouse').count(), 1, 'now showing');
-  equal(await tile(page, 'water.gem').getAttribute('data-unreleased'), 'true', 'and marked as such');
+  // Vaulted and never-released are different things and the grid says so.
+  equal(await tile(page, 'ironmouse').getAttribute('data-state'), 'vaulted');
+  equal(await tile(page, 'water.gem').getAttribute('data-state'), 'datamined');
+  equal(await tile(page, 'water').getAttribute('data-state'), 'live');
+
+  await tile(page, 'ironmouse').click({ delay: 700 });
+  await page.waitForSelector('#detail[open]');
+  assert(
+    (await page.locator('#detailState').textContent()).startsWith('Vaulted'),
+    'a vaulted sprite has to say when it comes back',
+  );
+  await page.keyboard.press('Escape');
+  await page.waitForSelector('#detail[open]', { state: 'detached' }).catch(() => {});
 
   await page.locator('#menuBtn').click();
   await page.waitForSelector('#menu[open]');

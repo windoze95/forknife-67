@@ -78,12 +78,27 @@ export const VARIANTS = {
 export const VARIANT_DUST = { rare: 2700, epic: 4000, legendary: 6750, mythic: 10000 };
 
 /**
+ * Why an entry might not be obtainable. Absent means it is live.
+ *
+ * The distinction is the whole reason the published totals disagree. IGN counts
+ * 111 Sprites; the game files list 118. Neither is wrong — IGN counts the two
+ * that shipped and were pulled back, and ignores the seven that have never been
+ * released at all. Both agree on the number that matters, 109 obtainable, which
+ * is what this app tracks by default.
+ */
+export const STATES = {
+  live: 'Obtainable now',
+  vaulted: 'Vaulted',
+  datamined: 'In the files, never released',
+};
+
+/**
  * `drop` is the chance of pulling that entry from a single Sprite Chest.
  * A 0 means it does not come out of chests at all — those are the ones you
  * summon with dust, or earn from Mastery (every Quack variant works this way).
  *
- * `released: false` marks an entry that is in the files but not yet obtainable.
- * Those are hidden unless you turn them on in the menu.
+ * `state` marks anything not currently obtainable, and `returns` an ISO date
+ * where one is known. Both are hidden unless you turn them on in the menu.
  */
 export const SPRITES = [
   /* ------------------------------- Rare -------------------------------- */
@@ -102,7 +117,7 @@ export const SPRITES = [
       { v: 'galaxy', drop: 0.43 },
       { v: 'holofoil', drop: 0.53 },
       { v: 'quack', drop: 0 },
-      { v: 'gem', drop: 0.37, released: false },
+      { v: 'gem', drop: 0.37, state: 'datamined' },
     ],
   },
   {
@@ -120,7 +135,7 @@ export const SPRITES = [
       { v: 'galaxy', drop: 0.43 },
       { v: 'cube', drop: 0.21 },
       { v: 'quack', drop: 0 },
-      { v: 'gem', drop: 0.37, released: false },
+      { v: 'gem', drop: 0.37, state: 'datamined' },
     ],
   },
   {
@@ -188,7 +203,7 @@ export const SPRITES = [
       { v: 'gold', drop: 0.62 },
       { v: 'gummy', drop: 0.37 },
       { v: 'galaxy', drop: 0.25 },
-      { v: 'gem', drop: 0.1, released: false },
+      { v: 'gem', drop: 0.1, state: 'datamined' },
     ],
   },
   {
@@ -220,7 +235,7 @@ export const SPRITES = [
       { v: 'gold', drop: 0.62 },
       { v: 'gummy', drop: 0.37 },
       { v: 'galaxy', drop: 0.25 },
-      { v: 'gem', drop: 0.1, released: false },
+      { v: 'gem', drop: 0.1, state: 'datamined' },
     ],
   },
   {
@@ -268,7 +283,7 @@ export const SPRITES = [
       { v: 'gold', drop: 0.62 },
       { v: 'gummy', drop: 0.37 },
       { v: 'galaxy', drop: 0.25 },
-      { v: 'gem', drop: 0.08, released: false },
+      { v: 'gem', drop: 0.08, state: 'datamined' },
     ],
   },
 
@@ -303,7 +318,7 @@ export const SPRITES = [
       { v: 'gummy', drop: 0.26 },
       { v: 'galaxy', drop: 0.17 },
       { v: 'cube', drop: 0.04 },
-      { v: 'gem', drop: 0, released: false },
+      { v: 'gem', drop: 0, state: 'datamined' },
     ],
   },
   {
@@ -391,7 +406,7 @@ export const SPRITES = [
       { v: 'holofoil', drop: 0.00028 },
       { v: 'cube', drop: 0.000014 },
       { v: 'quack', drop: 0 },
-      { v: 'gem', drop: 0.00001, released: false },
+      { v: 'gem', drop: 0.00001, state: 'datamined' },
     ],
   },
   {
@@ -410,7 +425,9 @@ export const SPRITES = [
       { v: 'galaxy', drop: 0.01 },
       { v: 'holofoil', drop: 0 },
       { v: 'cube', drop: 0 },
-      { v: 'gem', drop: 0.00099, released: false },
+      // Shipped 30 July alongside Ironmouse, pulled back the next day for
+      // going out early. No announced return.
+      { v: 'gem', drop: 0.00099, state: 'vaulted' },
     ],
   },
   {
@@ -481,7 +498,10 @@ export const SPRITES = [
     key: 'ironmouse',
     name: 'Ironmouse Sprite',
     rarity: 'mythic',
-    released: false,
+    // Released 30 July, vaulted a day later for going out early. Ironmouse
+    // said on stream it comes back on 4 August.
+    state: 'vaulted',
+    returns: '2026-08-04',
     power: 'Regenerate health over time when low. While regenerating, gain Cloak and low gravity!',
     scaling: '60 → 70 → 80 → 90 → 100 Health',
     where: 'Found in Relic Chests',
@@ -507,9 +527,12 @@ export function entryId(spriteKey, variant) {
   return variant && variant !== 'base' ? `${spriteKey}.${variant}` : spriteKey;
 }
 
-function buildEntry(sprite, variant, drop, released) {
+function buildEntry(sprite, variant, drop, state, returns) {
   const meta = VARIANTS[variant];
   return {
+    state,
+    released: state === 'live',
+    returns: returns || '',
     id: entryId(sprite.key, variant),
     spriteKey: sprite.key,
     sprite: sprite.name,
@@ -525,7 +548,6 @@ function buildEntry(sprite, variant, drop, released) {
     where: sprite.where,
     dust: variant === 'base' ? sprite.dust : VARIANT_DUST[sprite.rarity],
     drop,
-    released,
   };
 }
 
@@ -534,13 +556,19 @@ function orderedVariants(sprite) {
   return VARIANT_ORDER.filter((v) => byName.has(v)).map((v) => byName.get(v));
 }
 
-/** Every entry in the catalog, released or not, in display order. */
+/** Every entry in the catalog, obtainable or not, in display order. */
 export const ALL_ENTRIES = SPRITES.flatMap((sprite) => {
-  const baseReleased = sprite.released !== false;
+  const spriteState = sprite.state || 'live';
+
+  // A variant cannot be obtainable while its base sprite is not, so the
+  // sprite's own state wins over the variant's.
+  const stateFor = (variant) => (spriteState !== 'live' ? spriteState : variant.state || 'live');
+  const returnsFor = (variant) => (spriteState !== 'live' ? sprite.returns : variant.returns);
+
   return [
-    buildEntry(sprite, 'base', sprite.drop, baseReleased),
+    buildEntry(sprite, 'base', sprite.drop, spriteState, sprite.returns),
     ...orderedVariants(sprite).map((v) =>
-      buildEntry(sprite, v.v, v.drop, baseReleased && v.released !== false),
+      buildEntry(sprite, v.v, v.drop, stateFor(v), returnsFor(v)),
     ),
   ];
 });

@@ -1,5 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 import {
   SPRITES,
@@ -136,9 +141,70 @@ test('an unreleased variant cannot hide inside the released list', () => {
   assert.ok(RELEASED_ENTRIES.every((entry) => entry.released));
 });
 
+test('vaulted and never-released are tracked apart, and both totals reconcile', () => {
+  // IGN publishes 111 and the game files list 118. Neither is wrong: IGN counts
+  // the two that shipped and were pulled, and ignores the seven that never
+  // shipped at all. Conflating them is how the app would end up quoting a
+  // number nobody else recognises.
+  const count = (state) => ALL_ENTRIES.filter((entry) => entry.state === state).length;
+
+  assert.equal(count('live'), RELEASED, 'the number that actually matters');
+  assert.equal(count('vaulted'), 2);
+  assert.equal(count('datamined'), 7);
+  assert.equal(count('live') + count('vaulted'), 111, "IGN's total");
+  assert.equal(ALL_ENTRIES.length, TOTAL, "the game files' total");
+});
+
+test('a vaulted entry says so, and carries a return date when one is known', () => {
+  const ironmouse = ENTRY_BY_ID.get('ironmouse');
+  assert.equal(ironmouse.state, 'vaulted');
+  assert.equal(ironmouse.returns, '2026-08-04');
+
+  assert.equal(ENTRY_BY_ID.get('grim.gem').state, 'vaulted');
+  assert.equal(ENTRY_BY_ID.get('grim.gem').returns, '', 'no return has been announced');
+  assert.equal(ENTRY_BY_ID.get('water.gem').state, 'datamined');
+  assert.equal(ENTRY_BY_ID.get('water').state, 'live');
+});
+
+test("a variant cannot outlive the sprite it belongs to", () => {
+  // Ironmouse has no variants today, but if it gains one while vaulted the
+  // variant must not advertise itself as obtainable.
+  for (const entry of ALL_ENTRIES) {
+    if (entry.variant === 'base') continue;
+    const base = ENTRY_BY_ID.get(entry.spriteKey);
+    if (base.state !== 'live') {
+      assert.equal(entry.state, base.state, `${entry.name} outlives ${base.name}`);
+    }
+  }
+});
+
 test('an unreleased sprite takes its variants with it', () => {
   const hidden = groupsFor(false).find((group) => group.sprite.key === 'ironmouse');
   assert.equal(hidden, undefined);
+});
+
+test('every entry has artwork, and nothing is shipped that nothing points at', () => {
+  // The app builds the src from the entry id, so a missing file is a broken
+  // image on a real tile, and a stray file is dead weight in the deploy.
+  const dir = path.join(REPO_ROOT, 'public', 'sprites');
+  const onDisk = new Set(fs.readdirSync(dir).filter((f) => f.endsWith('.webp')));
+
+  for (const entry of ALL_ENTRIES) {
+    assert.ok(onDisk.delete(`${entry.id}.webp`), `no artwork for ${entry.name} (${entry.id})`);
+  }
+
+  assert.deepEqual([...onDisk], [], 'artwork with no catalog entry');
+});
+
+test('the artwork is small enough to ship', () => {
+  const dir = path.join(REPO_ROOT, 'public', 'sprites');
+  const total = fs
+    .readdirSync(dir)
+    .reduce((sum, file) => sum + fs.statSync(path.join(dir, file)).size, 0);
+
+  // The 512px originals would be 3.2 MB. Anything near that means someone
+  // committed unresized art.
+  assert.ok(total < 600 * 1024, `sprite art is ${(total / 1024).toFixed(0)} KB`);
 });
 
 test('drop chances stay readable across five orders of magnitude', () => {

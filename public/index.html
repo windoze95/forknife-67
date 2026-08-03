@@ -130,10 +130,12 @@
     </div>
 
     <div class="detail-meta" id="detailMeta" hidden>
+      <img class="detail-art" id="detailArt" alt="" width="72" height="72" decoding="async">
+
       <div class="detail-badges">
         <span class="rarity" id="detailRarity" data-rarity="rare">Rare</span>
         <span class="variant-tag" id="detailVariant" hidden></span>
-        <span class="tag-warn" id="detailUnreleased" hidden>Not released yet</span>
+        <span class="tag-warn" id="detailState" hidden></span>
       </div>
 
       <p class="detail-power" id="detailPower"></p>
@@ -215,9 +217,17 @@
       <label class="switch">
         <input type="checkbox" id="unreleasedToggle">
         <span class="switch-track" aria-hidden="true"><span class="switch-knob"></span></span>
-        <span class="switch-label">Show the <span id="catalogUnreleased">9</span> unreleased ones</span>
+        <span class="switch-label">Also show the <span id="catalogUnreleased">9</span> you can't get</span>
       </label>
-      <p class="muted">Datamined but not obtainable yet. Off by default so your total means what you think it means.</p>
+      <p class="muted">
+        <b id="catalogVaulted">2</b> vaulted — they shipped, then got pulled, and come back.
+        <b id="catalogDatamined">7</b> are in the game files but have never been released.
+        Off by default so your total means what you think it means.
+      </p>
+      <p class="muted">
+        This is why published counts disagree: IGN says 111 because it counts the vaulted
+        two, the game files say 118 because they count everything. Both agree on 109.
+      </p>
     </section>
 
     <section class="panel">
