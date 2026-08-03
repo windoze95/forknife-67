@@ -64,6 +64,11 @@
   --r-legendary: #b1560a;
   --r-mythic: #96690a;
 
+  /* The paper band's height. Three rules have to agree on it — the band itself,
+     the offset that hangs it above the toolbar, and the distance the toolbar
+     pins down the screen to leave room for it. */
+  --band: 6px;
+
   --radius: 14px;
   --radius-lg: 20px;
   /* Sized so a 390px phone fits 5 variants on one row and a 430px phone fits
@@ -163,7 +168,8 @@ svg { width: 1em; height: 1em; display: block; }
 .topbar {
   position: relative;
   background: var(--bg-elev);
-  border-bottom: 1px solid var(--line);
+  /* No rule along the bottom: the band below IS the rule, and a 1px line under
+     it would push the header's copy and the toolbar's out of register. */
   padding: calc(10px + var(--safe-top)) 14px 14px;
 }
 
@@ -173,18 +179,22 @@ svg { width: 1em; height: 1em; display: block; }
  * coloured stripe and a darker weave running the other way — read as a
  * diamond lattice without a single image or byte of network.
  *
- * Drawn on two elements and only ever seen on one: it ends the header while the
- * header is on screen, and crowns the toolbar the moment the toolbar takes over
- * the top of the screen. The handoff is exact, because the observer that flips
- * `is-stuck` watches a sentinel sitting between the two — the header's band
- * leaves the viewport on the same scroll position the toolbar arrives at it. So
- * the band reads as one strip that stays put while the page moves under it.
+ * Drawn on two elements that occupy the SAME 6px until the page scrolls. The
+ * header's copy ends the header; the toolbar's hangs above its own box, which
+ * puts it exactly on top of the header's — same size, same gradient, same
+ * phase, so the two are indistinguishable from one band.
+ *
+ * Then the toolbar pins 6px down the screen and its copy lands across the very
+ * top, while the header's slides out from underneath. Nothing appears,
+ * disappears or moves: the strip simply stops, and the page keeps going. Doing
+ * it by toggling one copy off and the other on cannot look like that — they are
+ * a band's height apart, so the swap reads as the band jumping down.
  */
 .topbar::after,
 .toolbar::before {
   content: '';
   position: absolute;
-  height: 6px;
+  height: var(--band);
   background-image:
     repeating-linear-gradient(-45deg, var(--weave) 0 11px, transparent 11px 22px),
     repeating-linear-gradient(
@@ -292,7 +302,15 @@ svg { width: 1em; height: 1em; display: block; }
   margin-top: 10px;
 }
 
-#stickySentinel { height: 1px; margin-bottom: -1px; }
+/* Lifted by a band's height, and only visually: the toolbar now pins that much
+   earlier, and this is the thing that has to notice it doing so. Shifting it in
+   flow instead would drag the toolbar up with it. */
+#stickySentinel {
+  position: relative;
+  top: calc(var(--band) * -1);
+  height: 1px;
+  margin-bottom: -1px;
+}
 
 .legend-item {
   display: inline-flex;
@@ -323,12 +341,11 @@ svg { width: 1em; height: 1em; display: block; }
 
 .toolbar {
   position: sticky;
-  top: 0;
+  /* Pinned a band's height down the screen, because the band hangs above the
+     box and has to land somewhere. The padding is untouched by any of this, so
+     the gap above the search field is the same pinned as at rest. */
+  top: var(--band);
   z-index: 15;
-  /* The band overlays the top of this padding rather than being given room of
-     its own: reserving 6px would show as a gap under the header at rest, where
-     there is no band to fill it, and moving the padding on `is-stuck` would
-     shove the grid down 6px at the moment it pins. */
   padding: 12px 14px 10px;
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(12px);
@@ -339,15 +356,8 @@ svg { width: 1em; height: 1em; display: block; }
    separator only appears when there is content scrolling underneath it. */
 .toolbar.is-stuck { border-bottom-color: var(--line); }
 
-/* Unstuck, the toolbar's band would sit directly beneath the header's own, and
-   two of them stacked is one too many. */
-.toolbar::before {
-  inset: 0 0 auto;
-  opacity: 0;
-  transition: opacity 0.18s ease;
-}
-
-.toolbar.is-stuck::before { opacity: 1; }
+/* Above its own box — see the band's own comment for what that buys. */
+.toolbar::before { inset: calc(var(--band) * -1) 0 auto; }
 
 .search { position: relative; display: flex; align-items: center; }
 

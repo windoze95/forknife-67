@@ -198,33 +198,50 @@ await check('a group heading names the sprite, its rarity and its power', async 
   );
 });
 
-await check('the paper band hands off from the header to the pinned toolbar', async () => {
-  const bands = () =>
+await check('the paper band stays put while the page scrolls out from under it', async () => {
+  // Both copies are real and both are painted; what stops that reading as two
+  // bands is that they occupy the same 6px until the toolbar pins. Geometry is
+  // the whole trick, so geometry is what this asserts.
+  const band = () =>
     page.evaluate(() => {
+      const topbar = document.querySelector('.topbar').getBoundingClientRect();
+      const toolbar = document.getElementById('toolbar').getBoundingClientRect();
+      const search = document.querySelector('.search').getBoundingClientRect();
       const header = getComputedStyle(document.querySelector('.topbar'), '::after');
-      const toolbar = getComputedStyle(document.getElementById('toolbar'), '::before');
+      const hanging = getComputedStyle(document.getElementById('toolbar'), '::before');
+
       return {
-        stuck: document.getElementById('toolbar').classList.contains('is-stuck'),
         paint: header.backgroundImage,
-        samePaint: header.backgroundImage === toolbar.backgroundImage,
-        shown: toolbar.opacity,
+        samePaint: header.backgroundImage === hanging.backgroundImage,
+        // The toolbar's copy hangs above its box, so the toolbar's top edge is
+        // the band's bottom edge in both states.
+        top: +(toolbar.top - parseFloat(hanging.height)).toFixed(1),
+        bottom: +toolbar.top.toFixed(1),
+        headerBandBottom: +topbar.bottom.toFixed(1),
+        gapToSearch: +(search.top - toolbar.top).toFixed(1),
       };
     });
 
-  const rest = await bands();
-  equal(rest.stuck, false, 'nothing pinned at the top of the page');
-  equal(rest.shown, '0', "unstuck it sits under the header's own band, and two is one too many");
-  assert(rest.paint.includes('repeating-linear-gradient'), 'the header band is the gradient pair');
+  const rest = await band();
+  assert(rest.paint.includes('repeating-linear-gradient'), 'the band is the gradient pair');
   assert(rest.samePaint, 'drawn twice, so the two have to be the same paint');
+  equal(
+    rest.bottom,
+    rest.headerBandBottom,
+    'at rest the toolbar\'s copy lands exactly on the header\'s, which is why one band is all you see',
+  );
 
   await page.evaluate(() => window.scrollTo(0, 800));
   await page.waitForFunction(() => document.getElementById('toolbar').classList.contains('is-stuck'));
-  // The band fades in; reading opacity mid-fade is a number between the two.
-  await page
-    .locator('#toolbar')
-    .evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished.catch(() => {}))));
 
-  equal((await bands()).shown, '1', 'the toolbar takes the top of the screen, and the band with it');
+  const pinned = await band();
+  equal(pinned.top, 0, 'pinned, the band is the top of the screen');
+  assert(pinned.headerBandBottom < 0, 'and the header has gone, rather than handed anything over');
+  equal(
+    pinned.gapToSearch,
+    rest.gapToSearch,
+    'the search field sits the same distance under the band either way — the band hangs outside the toolbar, so it costs the layout nothing',
+  );
 
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.waitForFunction(() => !document.getElementById('toolbar').classList.contains('is-stuck'));
