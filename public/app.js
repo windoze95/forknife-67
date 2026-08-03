@@ -40,7 +40,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.5.1';
+const APP_VERSION = '2.5.2';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 

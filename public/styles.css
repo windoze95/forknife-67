@@ -325,12 +325,11 @@ svg { width: 1em; height: 1em; display: block; }
   position: sticky;
   top: 0;
   z-index: 15;
-  /* The extra 6px at the top is the band's, so the gap above the search field
-     is the same whether the band is showing or not. Paying for it here rather
-     than in an `is-stuck` rule keeps the toolbar one height: growing it at the
-     moment it sticks would shove the grid down by 6px, and can chatter between
-     stuck and unstuck at exactly the scroll position that triggers it. */
-  padding: 18px 14px 10px;
+  /* The band overlays the top of this padding rather than being given room of
+     its own: reserving 6px would show as a gap under the header at rest, where
+     there is no band to fill it, and moving the padding on `is-stuck` would
+     shove the grid down 6px at the moment it pins. */
+  padding: 12px 14px 10px;
   background: color-mix(in srgb, var(--bg) 94%, transparent);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid transparent;
