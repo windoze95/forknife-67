@@ -113,8 +113,31 @@ await page.goto(base);
 await page.waitForSelector('.tile');
 
 await check('renders the released catalog, grouped by sprite', async () => {
-  equal(await page.locator('.tile').count(), 109, 'entry count');
-  equal(await page.locator('.group').count(), 24, 'base sprites');
+  // 109 obtainable plus the two vaulted ones, which are drawn but not counted.
+  equal(await page.locator('.tile').count(), 111, 'entry count');
+  equal(await page.locator('.group').count(), 25, 'base sprites');
+});
+
+await check('sprites due back are called out, without inflating the total', async () => {
+  // Knowing Ironmouse lands on the 4th is a thing you open the app to check.
+  const items = await page.locator('.soon-item').evaluateAll((els) =>
+    els.map((el) => ({
+      id: el.dataset.id,
+      name: el.querySelector('.soon-name').textContent,
+      when: el.querySelector('.soon-when').textContent,
+    })),
+  );
+
+  equal(items.length, 2, 'two sprites are vaulted right now');
+  const ironmouse = items.find((item) => item.id === 'ironmouse');
+  assert(ironmouse, 'Ironmouse should be listed');
+  // Formatted in the viewer's locale, so assert the parts rather than an order.
+  assert(/4/.test(ironmouse.when) && /Aug/i.test(ironmouse.when), `got ${ironmouse.when}`);
+  equal(items.find((item) => item.id === 'grim.gem').when, 'No date yet');
+
+  // Visible in the grid, but never part of what you are counting down.
+  equal(await tile(page, 'ironmouse').count(), 1, 'drawn in the grid too');
+  equal(await page.locator('#progressCount').textContent(), '0 / 109', 'and not in the total');
 });
 
 await check('starts at 0 / 109 collected', async () => {
@@ -190,6 +213,47 @@ await check('progress counts owned and maxed separately', async () => {
 await check('a group heading tracks its own sprite', async () => {
   equal(await group(page, 'water').locator('.group-count').textContent(), '1 / 6');
   equal(await group(page, 'fire').locator('.group-count').textContent(), '0 / 7');
+});
+
+await check('the heading goes gold as soon as anything in it is mastered', async () => {
+  // Nothing mastered in Water yet — Earth has one.
+  equal(await group(page, 'water').getAttribute('data-maxed'), 'none');
+  equal(await group(page, 'earth').getAttribute('data-maxed'), 'some');
+
+  // Mastering every variant of a sprite is the state that earns both halves.
+  for (const id of ['johnwick', 'pollo']) {
+    await tile(page, id).click();
+    await tile(page, id).click();
+  }
+
+  equal(await group(page, 'johnwick').getAttribute('data-maxed'), 'all');
+  equal(await group(page, 'pollo').getAttribute('data-maxed'), 'all');
+
+  // The data attribute is only half of it — a CSS rule has to actually win.
+  // "All collected" paints the left number green, and all-mastered has to beat
+  // it, which is a specificity fight that loses silently.
+  const colours = await group(page, 'johnwick').evaluate((el) => {
+    // Resolve the --maxed token through the browser so the comparison is
+    // against whatever the theme actually paints, not a hardcoded hex.
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--maxed)';
+    el.append(probe);
+    const gold = getComputedStyle(probe).color;
+    probe.remove();
+
+    return {
+      left: getComputedStyle(el.querySelector('.gc-have')).color,
+      right: getComputedStyle(el.querySelector('.gc-total')).color,
+      gold,
+    };
+  });
+
+  equal(colours.left, colours.gold, 'left half of an all-mastered counter');
+  equal(colours.right, colours.gold, 'right half of an all-mastered counter');
+
+  // Put them back so the counts the later sync checks rely on still hold.
+  for (const id of ['johnwick', 'pollo']) await tile(page, id).click();
+  equal(await group(page, 'johnwick').getAttribute('data-maxed'), 'none');
 });
 
 await check('the maxed tile shows a crown mark', async () => {
@@ -294,7 +358,7 @@ await check('filters narrow the grid', async () => {
   equal(await page.locator('.tile').count(), 2, 'owned filter');
 
   await page.locator('.chip[data-filter="all"]').click();
-  equal(await page.locator('.tile').count(), 109, 'back to all');
+  equal(await page.locator('.tile').count(), 111, 'back to all');
 });
 
 await check('search finds an entry by the name the game gives it', async () => {
@@ -302,7 +366,7 @@ await check('search finds an entry by the name the game gives it', async () => {
   equal(await tileIds(page), ['water.gold']);
 
   await page.locator('#searchClear').click();
-  equal(await page.locator('.tile').count(), 109, 'cleared');
+  equal(await page.locator('.tile').count(), 111, 'cleared');
 });
 
 await check("search also accepts Epic's patch-note spelling", async () => {
@@ -394,8 +458,11 @@ await check('a sprite Epic ships early can be added by hand', async () => {
 // what a person actually taps.
 const toggleSwitch = (target, id) => target.locator(`label.switch:has(#${id})`).click();
 
-await check('unreleased entries stay hidden until you ask for them', async () => {
-  equal(await tile(page, 'ironmouse').count(), 0, 'hidden by default');
+await check('never-released entries stay hidden until you ask for them', async () => {
+  // Vaulted is not the same as never released: one is coming back on a date,
+  // the other has never existed for players, and only the second is hidden.
+  equal(await tile(page, 'ironmouse').count(), 1, 'vaulted, so shown');
+  equal(await tile(page, 'water.gem').count(), 0, 'never shipped, so hidden');
 
   await page.locator('#menuBtn').click();
   await page.waitForSelector('#menu[open]');
@@ -403,8 +470,7 @@ await check('unreleased entries stay hidden until you ask for them', async () =>
   await page.keyboard.press('Escape');
 
   equal(await page.locator('#progressCount').textContent(), '3 / 119');
-  equal(await tile(page, 'ironmouse').count(), 1, 'now showing');
-  // Vaulted and never-released are different things and the grid says so.
+  equal(await tile(page, 'water.gem').count(), 1, 'now showing');
   equal(await tile(page, 'ironmouse').getAttribute('data-state'), 'vaulted');
   equal(await tile(page, 'water.gem').getAttribute('data-state'), 'datamined');
   equal(await tile(page, 'water').getAttribute('data-state'), 'live');
