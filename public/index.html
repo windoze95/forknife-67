@@ -1,4 +1,12 @@
 <!doctype html>
+<!--
+  The theme defaults to System and is resolved by app.js, which is a module and
+  so runs after the first paint. This attribute is what that first paint uses.
+  It stays dark deliberately: a device set to dark never flashes at all, and a
+  device set to light gets a dark blink rather than a white one, which is the
+  cheaper of the two mistakes to make on a phone at night. The CSP allows no
+  inline script, so stamping it before paint would take a file of its own.
+-->
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">

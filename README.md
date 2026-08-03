@@ -30,7 +30,8 @@ phone and your PC.
 - **Installable** — add it to your home screen and it opens full screen, offline;
   iPhone gets the Share-sheet steps, since Safari never fires an install prompt
 - **Optional cloud sync** — one vault code, no account, no email
-- Dark and light themes, compact grid mode
+- Follows your device's dark or light setting until you pick one yourself;
+  compact grid mode
 
 ## Why "Owned" matters most
 
