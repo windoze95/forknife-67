@@ -39,7 +39,7 @@
  * today, and the issue this files says so.
  */
 
-import { ALL_ENTRIES, SPRITES, idForName } from '../public/lib/catalog.js';
+import { ALL_ENTRIES, SPRITES, VARIANTS, idForName } from '../public/lib/catalog.js';
 
 /** Sources that answer a plain fetch. fortnite.gg does not, so it is not here. */
 export const SOURCES = [
@@ -84,6 +84,21 @@ const STOPWORDS = new Set(
     .filter(Boolean),
 );
 
+const normalize = (word) => word.toLowerCase().replace(/[^a-z']/g, '');
+
+/**
+ * Variant labels — Gem, Gold, Holofoil. On their own they name no entry: every
+ * real one reads "<Variant> <Base> Sprite". A page announcing "8 Gem Sprites
+ * were added!" is describing a batch, not a sprite called Gem, and treating it
+ * as a name is a false alarm that repeats every day until the page changes.
+ *
+ * Kept out of STOPWORDS on purpose. Leading stopwords get peeled off a
+ * candidate before matching, and peeling a variant label would let a genuinely
+ * new "Holofoil Duck Sprite" resolve on the strength of "Duck" — the exact miss
+ * `resolves` is written to avoid.
+ */
+const VARIANT_LABELS = new Set(Object.values(VARIANTS).map((v) => normalize(v.label)));
+
 /** Every "<Something> Sprite" the page mentions, matched one sentence at a time. */
 export function extractSpriteNames(text) {
   const found = new Set();
@@ -94,7 +109,8 @@ export function extractSpriteNames(text) {
     for (const match of chunk.matchAll(/([A-Z][A-Za-z'.]*(?: [A-Z][A-Za-z'.]*){0,3}) Sprites?\b/g)) {
       const name = match[1].trim();
       const words = name.split(' ');
-      if (words.every((word) => STOPWORDS.has(word.toLowerCase().replace(/[^a-z']/g, '')))) continue;
+      if (words.every((word) => STOPWORDS.has(normalize(word)))) continue;
+      if (words.every((word) => VARIANT_LABELS.has(normalize(word)))) continue;
       found.add(name);
     }
   }
@@ -102,7 +118,7 @@ export function extractSpriteNames(text) {
   return [...found];
 }
 
-const isStopword = (word) => STOPWORDS.has(word.toLowerCase().replace(/[^a-z']/g, ''));
+const isStopword = (word) => STOPWORDS.has(normalize(word));
 
 /**
  * True when the candidate names something the catalog already holds.

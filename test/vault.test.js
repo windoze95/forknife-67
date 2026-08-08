@@ -301,7 +301,8 @@ test('counts split owned and maxed across the released catalog', () => {
 });
 
 test('unreleased entries only count once you ask to see them', () => {
-  const doc = docWith([{ id: 'ironmouse', status: 'owned' }]);
+  // Gem Punk is the only entry left that the game has never released.
+  const doc = docWith([{ id: 'punk.gem', status: 'owned' }]);
 
   assert.equal(countsFor(doc).total, RELEASED);
   assert.equal(countsFor(doc).collected, 0, 'hidden entries do not inflate progress');
@@ -327,7 +328,8 @@ test('group counts read against the whole sprite, not the current filter', () =>
 
   const entries = RELEASED_ENTRIES.filter((entry) => entry.spriteKey === 'water');
   // maxed is separate from collected: the heading marks the two differently.
-  assert.deepEqual(groupCounts(doc, entries), { collected: 2, maxed: 1, total: 6 });
+  // Seven since 6 August, when Water gained its Gem.
+  assert.deepEqual(groupCounts(doc, entries), { collected: 2, maxed: 1, total: 7 });
 });
 
 test('a group is on exactly one rung, whatever the counts', () => {

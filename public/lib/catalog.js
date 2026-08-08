@@ -21,8 +21,8 @@
  *     Burnt Peanut       TheBurntPeanut Sprite
  *
  * Fan checklists get this wrong in both directions, and they disagree with each
- * other on the totals (91 / 109 / 111 are all in circulation) and on what the
- * variants do. Trust the game files.
+ * other on the totals (91 / 109 / 111 / 117 have all been in circulation for
+ * this season) and on what the variants do. Trust the game files.
  *
  * Epic ships new sprites and variants with roughly every patch, so this file
  * goes stale on a schedule. Two things keep that from being a problem:
@@ -33,9 +33,16 @@
  *      file is updated is still trackable that day.
  */
 
-/** The patch this catalog was verified against. Shown in the app. */
+/**
+ * The patch this catalog was verified against, and the day it was checked.
+ * Shown in the app.
+ *
+ * The 6 August Gem release came in as a hotfix — neither fortnite.gg nor
+ * Epic's news feed put a version number on it — so the patch label stands
+ * still while the verification date moves.
+ */
 export const CATALOG_PATCH = 'v41.30';
-export const CATALOG_VERIFIED = '2026-08-02';
+export const CATALOG_VERIFIED = '2026-08-08';
 
 export const RARITIES = ['rare', 'epic', 'legendary', 'mythic'];
 
@@ -80,11 +87,12 @@ export const VARIANT_DUST = { rare: 2700, epic: 4000, legendary: 6750, mythic: 1
 /**
  * Why an entry might not be obtainable. Absent means it is live.
  *
- * The distinction is the whole reason the published totals disagree. IGN counts
- * 111 Sprites; the game files list 118. Neither is wrong — IGN counts the two
- * that shipped and were pulled back, and ignores the seven that have never been
- * released at all. Both agree on the number that matters, 109 obtainable, which
- * is what this app tracks by default.
+ * The distinction is the whole reason the published totals disagree. Since the
+ * Gem release of 6 August, fortnite.gg and IGN both quote 117; the game files
+ * list 118. The odd one out is Punk's Gem variant, whose art still ships in the
+ * files but which neither source lists as obtainable. It stays `datamined` and
+ * out of the denominator rather than being deleted — an id that disappears
+ * strands whatever anyone had already recorded against it.
  */
 export const STATES = {
   live: 'Obtainable now',
@@ -117,7 +125,7 @@ export const SPRITES = [
       { v: 'galaxy', drop: 0.43 },
       { v: 'holofoil', drop: 0.53 },
       { v: 'quack', drop: 0 },
-      { v: 'gem', drop: 0.37, state: 'datamined' },
+      { v: 'gem', drop: 0.37 },
     ],
   },
   {
@@ -135,7 +143,7 @@ export const SPRITES = [
       { v: 'galaxy', drop: 0.43 },
       { v: 'cube', drop: 0.21 },
       { v: 'quack', drop: 0 },
-      { v: 'gem', drop: 0.37, state: 'datamined' },
+      { v: 'gem', drop: 0.37 },
     ],
   },
   {
@@ -203,7 +211,7 @@ export const SPRITES = [
       { v: 'gold', drop: 0.62 },
       { v: 'gummy', drop: 0.37 },
       { v: 'galaxy', drop: 0.25 },
-      { v: 'gem', drop: 0.1, state: 'datamined' },
+      { v: 'gem', drop: 0.1 },
     ],
   },
   {
@@ -235,7 +243,7 @@ export const SPRITES = [
       { v: 'gold', drop: 0.62 },
       { v: 'gummy', drop: 0.37 },
       { v: 'galaxy', drop: 0.25 },
-      { v: 'gem', drop: 0.1, state: 'datamined' },
+      { v: 'gem', drop: 0.1 },
     ],
   },
   {
@@ -283,7 +291,7 @@ export const SPRITES = [
       { v: 'gold', drop: 0.62 },
       { v: 'gummy', drop: 0.37 },
       { v: 'galaxy', drop: 0.25 },
-      { v: 'gem', drop: 0.08, state: 'datamined' },
+      { v: 'gem', drop: 0.08 },
     ],
   },
 
@@ -318,6 +326,9 @@ export const SPRITES = [
       { v: 'gummy', drop: 0.26 },
       { v: 'galaxy', drop: 0.17 },
       { v: 'cube', drop: 0.04 },
+      // The one Gem left behind on 6 August. Its art is still served from the
+      // game files, but fortnite.gg lists no Punk Gem even with unreleased
+      // shown, so there is nothing to say it is obtainable.
       { v: 'gem', drop: 0, state: 'datamined' },
     ],
   },
@@ -406,7 +417,7 @@ export const SPRITES = [
       { v: 'holofoil', drop: 0.00028 },
       { v: 'cube', drop: 0.000014 },
       { v: 'quack', drop: 0 },
-      { v: 'gem', drop: 0.00001, state: 'datamined' },
+      { v: 'gem', drop: 0.00001 },
     ],
   },
   {
@@ -426,8 +437,8 @@ export const SPRITES = [
       { v: 'holofoil', drop: 0 },
       { v: 'cube', drop: 0 },
       // Shipped 30 July alongside Ironmouse, pulled back the next day for
-      // going out early. No announced return.
-      { v: 'gem', drop: 0.00099, state: 'vaulted' },
+      // going out early, and back for good on 6 August with the other Gems.
+      { v: 'gem', drop: 0.00099 },
     ],
   },
   {
@@ -498,10 +509,8 @@ export const SPRITES = [
     key: 'ironmouse',
     name: 'Ironmouse Sprite',
     rarity: 'mythic',
-    // Released 30 July, vaulted a day later for going out early. Ironmouse
-    // said on stream it comes back on 4 August.
-    state: 'vaulted',
-    returns: '2026-08-04',
+    // Released 30 July, vaulted a day later for going out early, back on
+    // 4 August as Ironmouse said on stream.
     power: 'Regenerate health over time when low. While regenerating, gain Cloak and low gravity!',
     scaling: '60 → 70 → 80 → 90 → 100 Health',
     where: 'Found in Relic Chests',

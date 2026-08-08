@@ -10,6 +10,7 @@ import {
   SPRITES,
   ALL_ENTRIES,
   RELEASED_ENTRIES,
+  VAULTED_ENTRIES,
   ENTRY_BY_ID,
   VARIANTS,
   VARIANT_ORDER,
@@ -26,15 +27,16 @@ import { isValidEntryId } from '../public/lib/vault.js';
 
 /**
  * The counts every other number in the app is derived from, taken from the
- * game files on 2026-08-02 (patch v41.30). Both this app's first version and
- * the tracker it was compared against said 111, and both were wrong.
+ * game files on 2026-08-08, after the 6 August Gem release moved eight entries
+ * into reach. Both this app's first version and the tracker it was compared
+ * against said 111, and both were wrong.
  *
  * When Epic ships more sprites, update these deliberately — a silent change
  * here is the app quietly lying about how far off completion you are.
  */
-const RELEASED = 109;
+const RELEASED = 117;
 const TOTAL = 118;
-const RELEASED_SPRITES = 24;
+const RELEASED_SPRITES = 25;
 
 test('the catalog holds the counts the game reports', () => {
   assert.equal(RELEASED_ENTRIES.length, RELEASED);
@@ -48,14 +50,26 @@ test('what counts and what is drawn are not the same set', () => {
   // known return date is still worth seeing. Collapsing these two into one
   // "released" flag is what makes a tracker either lie about your progress or
   // hide the thing you are waiting for.
+  //
+  // The vault is empty as of 6 August, so the two sets happen to coincide.
+  // What is pinned here is the rule, not the coincidence — assert against
+  // VAULTED_ENTRIES so this keeps meaning something the next time Epic pulls
+  // something back.
   assert.equal(entriesFor(false).length, RELEASED, 'countable is obtainable-only');
-  assert.equal(visibleEntries(false).length, RELEASED + 2, 'drawn includes the vaulted two');
-
-  assert.equal(groupsFor(false).length, RELEASED_SPRITES + 1, 'Ironmouse is drawn, not counted');
-  assert.ok(
-    !entriesFor(false).some((entry) => entry.id === 'ironmouse'),
-    'and never reaches the total',
+  assert.equal(
+    visibleEntries(false).length,
+    RELEASED + VAULTED_ENTRIES.length,
+    'drawn is the countable set plus whatever is waiting to come back',
   );
+  assert.equal(groupsFor(false).length, RELEASED_SPRITES);
+
+  // Gem Punk is the only thing either set leaves out of the full 118.
+  const countable = new Set(entriesFor(false).map((entry) => entry.id));
+  const drawn = new Set(visibleEntries(false).map((entry) => entry.id));
+  const missing = (set) => ALL_ENTRIES.filter((entry) => !set.has(entry.id)).map((e) => e.id);
+
+  assert.deepEqual(missing(countable), ['punk.gem']);
+  assert.deepEqual(missing(drawn), ['punk.gem']);
 
   // The toggle widens both to everything.
   assert.equal(entriesFor(true).length, TOTAL);
@@ -155,35 +169,44 @@ test('a variant inherits its base power and adds only its own perk', () => {
 });
 
 test('an unreleased variant cannot hide inside the released list', () => {
-  assert.equal(ENTRY_BY_ID.get('water.gem').released, false);
-  assert.equal(ENTRY_BY_ID.get('ironmouse').released, false);
-  assert.equal(ENTRY_BY_ID.get('llama.gem').released, true, 'this one did ship');
+  assert.equal(ENTRY_BY_ID.get('punk.gem').released, false, 'the Gem left behind');
+  assert.equal(ENTRY_BY_ID.get('water.gem').released, true, 'shipped 6 August');
+  assert.equal(ENTRY_BY_ID.get('ironmouse').released, true, 'back from the vault');
+  assert.equal(ENTRY_BY_ID.get('llama.gem').released, true, 'this one shipped earlier');
 
   assert.ok(RELEASED_ENTRIES.every((entry) => entry.released));
 });
 
 test('vaulted and never-released are tracked apart, and both totals reconcile', () => {
-  // IGN publishes 111 and the game files list 118. Neither is wrong: IGN counts
-  // the two that shipped and were pulled, and ignores the seven that never
-  // shipped at all. Conflating them is how the app would end up quoting a
-  // number nobody else recognises.
+  // fortnite.gg and IGN both publish 117 and the game files list 118. Neither
+  // is wrong: the extra one is Gem Punk, which has art in the files and no way
+  // to obtain it. Conflating the two states is how the app would end up
+  // quoting a number nobody else recognises.
   const count = (state) => ALL_ENTRIES.filter((entry) => entry.state === state).length;
 
   assert.equal(count('live'), RELEASED, 'the number that actually matters');
-  assert.equal(count('vaulted'), 2);
-  assert.equal(count('datamined'), 7);
-  assert.equal(count('live') + count('vaulted'), 111, "IGN's total");
+  assert.equal(count('vaulted'), 0, '6 August emptied the vault');
+  assert.equal(count('datamined'), 1);
+  assert.equal(count('live') + count('vaulted'), 117, 'what both trackers publish');
   assert.equal(ALL_ENTRIES.length, TOTAL, "the game files' total");
 });
 
-test('a vaulted entry says so, and carries a return date when one is known', () => {
-  const ironmouse = ENTRY_BY_ID.get('ironmouse');
-  assert.equal(ironmouse.state, 'vaulted');
-  assert.equal(ironmouse.returns, '2026-08-04');
+test('an entry that cannot be obtained says which kind of gone it is', () => {
+  // Nothing is vaulted today, so the two cases left are never-shipped and
+  // ordinary. They must not read alike: one is worth waiting for and one is
+  // not, and the grid draws them differently.
+  const punk = ENTRY_BY_ID.get('punk.gem');
+  assert.equal(punk.state, 'datamined');
+  assert.equal(punk.returns, '', 'never shipped, so there is nothing to return to');
 
-  assert.equal(ENTRY_BY_ID.get('grim.gem').state, 'vaulted');
-  assert.equal(ENTRY_BY_ID.get('grim.gem').returns, '', 'no return has been announced');
-  assert.equal(ENTRY_BY_ID.get('water.gem').state, 'datamined');
+  assert.deepEqual(VAULTED_ENTRIES, [], 'the vault is empty');
+
+  const ironmouse = ENTRY_BY_ID.get('ironmouse');
+  assert.equal(ironmouse.state, 'live', 'came back 4 August');
+  assert.equal(ironmouse.returns, '', 'and the date it was waiting on is spent');
+
+  assert.equal(ENTRY_BY_ID.get('grim.gem').state, 'live');
+  assert.equal(ENTRY_BY_ID.get('water.gem').state, 'live');
   assert.equal(ENTRY_BY_ID.get('water').state, 'live');
 });
 
@@ -202,9 +225,16 @@ test("a variant cannot outlive the sprite it belongs to", () => {
 test('never-released entries stay out of the default grid; vaulted ones do not', () => {
   const visible = new Set(visibleEntries(false).map((entry) => entry.id));
 
-  assert.ok(visible.has('ironmouse'), 'due back on a known date, so it is shown');
-  assert.ok(visible.has('grim.gem'), 'vaulted with no date is still shown');
-  assert.ok(!visible.has('water.gem'), 'never shipped, so it is not');
+  assert.ok(visible.has('ironmouse'), 'back from the vault, so it is shown');
+  assert.ok(visible.has('grim.gem'), 'so is the Gem that came back with it');
+  assert.ok(!visible.has('punk.gem'), 'never shipped, so it is not');
+
+  // The rule, rather than today's three examples of it: only never-released
+  // entries are held back from the grid.
+  assert.deepEqual(
+    [...new Set(ALL_ENTRIES.filter((entry) => !visible.has(entry.id)).map((e) => e.state))],
+    ['datamined'],
+  );
 });
 
 test('every entry has artwork, and nothing is shipped that nothing points at', () => {

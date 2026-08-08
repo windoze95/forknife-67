@@ -14,7 +14,7 @@ phone and your PC.
 
 ## What it does
 
-- **All 109 sprites and variants**, named and pictured, grouped by base sprite,
+- **All 117 sprites and variants**, named and pictured, grouped by base sprite,
   with each sprite's power, rarity and where it spawns
 - **Three states**, cycled with a single tap:
   - **Needed** — not in your collection
@@ -41,27 +41,28 @@ never found. Mark a sprite the moment you extract it and the guessing stops.
 
 ## Where the sprite data comes from
 
-`public/lib/catalog.js` holds 25 base sprites and 118 entries, 109 of them
+`public/lib/catalog.js` holds 25 base sprites and 118 entries, 117 of them
 obtainable. Names, rarities, power text, level scaling, spawn locations, drop
 rates and dust costs are read out of the game files; Epic's patch notes and
 IGN's checklist are the second sources.
 
 ### Why the published totals disagree
 
-You will see 109, 111 and 118 quoted for the same season. All three are right,
-about different things:
+You will see 117 and 118 quoted for the same season. Both are right, about
+different things:
 
 | Count | What it is |
 | ----- | ---------- |
-| **109** | Obtainable right now. What the app tracks, and what every source agrees on. |
-| **111** | IGN's figure — the 109 plus two that shipped and were pulled back. |
-| **118** | The game files — everything above plus seven variants that have never been released. |
+| **117** | Obtainable right now. What the app tracks, and what every source agrees on. |
+| **118** | The game files — the 117 plus one variant that has never been released. |
 
-So the app keeps three states rather than a released flag. Ironmouse and Gem
-Grim went live on 30 July and were vaulted a day later for going out early;
-Ironmouse is back on 4 August, and the app says so on the entry. The other
-seven Gem variants have never shipped at all. Turn on **Menu → Catalog** to see
-them; the totals stay honest either way.
+So the app keeps three states rather than a released flag. On 6 August the Gem
+variants shipped in a batch: six that had only ever been in the files, plus Gem
+Grim, which went live on 30 July with Ironmouse and was pulled a day later for
+going out early. Ironmouse itself came back on 4 August. That empties the vault
+and leaves Punk's Gem as the only entry you cannot get — its art is in the game
+files, but no source lists it as obtainable. Turn on **Menu → Catalog** to see
+it; the totals stay honest either way.
 
 IGN also counts "20 base Sprites", which is the 20 that have variant families —
 the five collab Mythics (Burnt Peanut, Vini Jr., Pollo, John Wick, Ironmouse)
@@ -76,7 +77,8 @@ the app shows, and both are searchable, so it does not matter which one you
 know.
 
 Popular fan checklists get several of these names wrong, disagree with each
-other on the total (91, 109 and 111 are all in circulation) and misreport what
+other on the total (91, 109, 111 and 117 have all been in circulation for this
+season) and misreport what
 the variants do. Two of `test/catalog.test.js`'s assertions exist to stop those
 numbers drifting back in.
 
@@ -92,7 +94,12 @@ It reads IGN's checklist, resolves every sprite name it finds against the
 catalog, compares the totals, and files one issue when something doesn't line
 up. `test/drift.test.js` pins it at both ends — it has to catch a new sprite
 *and* a new variant of an existing one, and it must not fire on prose like
-"Master Sprites" or on a Mastery reward that happens to mention a number.
+"Master Sprites", on a Mastery reward that happens to mention a number, or on a
+batch announcement like "8 Gem Sprites were added!", which names a variant and
+not a sprite. That last one is why variant labels are excluded by their own
+rule rather than added to the stopword list: stopwords get peeled off the front
+of a name before matching, and peeling "Holofoil" would let a genuinely new
+Holofoil Duck resolve on the strength of "Duck".
 
 **It detects; it never edits.** The catalog ships inside the app so the app
 works with no signal — that is the whole point of a tracker you use mid-match
@@ -112,7 +119,7 @@ Node 22+. The app itself has no runtime dependencies.
 
 ```bash
 npm start           # http://localhost:8080 — plain Node, nothing to install
-npm test            # 80 unit, catalog, drift + API tests
+npm test            # 84 unit, catalog, drift + API tests
 npm run icons       # regenerate the PWA icons
 ```
 
@@ -124,7 +131,7 @@ npm run dev:worker  # the Worker + Durable Object under workerd
 npm run test:worker # 21 contract tests against a real `wrangler dev`
 ```
 
-Browser end-to-end tests (39 checks, needs Chromium):
+Browser end-to-end tests (43 checks, needs Chromium):
 
 ```bash
 npm install --no-save playwright
@@ -133,7 +140,7 @@ node test/browser-smoke.mjs
 ```
 
 `BASE_URL` points that suite at anything already running, which is how the
-Worker gets the same 39 checks rather than a second suite that only rhymes
+Worker gets the same 43 checks rather than a second suite that only rhymes
 with them:
 
 ```bash
