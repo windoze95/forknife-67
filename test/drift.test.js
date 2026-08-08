@@ -25,7 +25,7 @@ const check = (html) => {
 
 test('a page that matches the catalog reports no drift', () => {
   const report = check(`
-    <p>There are currently 111 Sprites of varying rarity (though you can currently only find 109).</p>
+    <p>There are currently 118 Sprites of varying rarity (though you can currently only find 117).</p>
     <table>
       <tr><td>Water Sprite</td><td>Rare</td></tr>
       <tr><td>Gold Water Sprite</td><td>Special</td></tr>
@@ -78,6 +78,24 @@ test('ordinary prose about sprites is not mistaken for a sprite', () => {
   assert.deepEqual(report.unknown, [], 'a daily false alarm gets the whole check muted');
 });
 
+test('an announcement about a batch of variants is not a sprite called Gem', () => {
+  // IGN's changelog line the morning the Gems shipped. Left unhandled this
+  // fires the daily issue forever, because the page keeps saying it.
+  const report = check('<p>Updated on August 6, 2026: 8 Gem Sprites were added!</p>');
+
+  assert.deepEqual(report.unknown, [], 'a variant label alone names nothing');
+});
+
+test('a new variant of a known sprite is caught even under a label we know', () => {
+  // The reason variant labels are not stopwords. Duck has no Holofoil today,
+  // so if one shows up on the page it has to be reported — resolving it on the
+  // strength of "Duck" is how a real addition goes unnoticed.
+  const report = check('<li>Holofoil Duck Sprite</li>');
+
+  assert.equal(report.drifted, true);
+  assert.deepEqual(report.unknown, ['Holofoil Duck']);
+});
+
 test('a label in front of the name does not read as part of it', () => {
   // Checklist tables put a status column next to the name, and flattening the
   // page runs them together.
@@ -103,7 +121,7 @@ test('suffix resolution accepts a real name and rejects an invented one', () => 
 });
 
 test('a total that changed is reported, and the ones we expect are not', () => {
-  const same = check('<p>There are currently 111 Sprites, though only 109 are obtainable.</p>');
+  const same = check('<p>There are currently 118 Sprites, though only 117 are obtainable.</p>');
   assert.deepEqual(same.unexplainedTotals, []);
 
   const moved = check('<p>There are currently 126 Sprites, though only 124 are obtainable.</p>');
@@ -115,7 +133,7 @@ test('counts that are not collection totals are ignored', () => {
   // Mastery rewards and dust prices are full of numbers that are not the size
   // of the collection.
   const report = check(`
-    <p>There are currently 111 Sprites, though only 109 are obtainable.</p>
+    <p>There are currently 118 Sprites, though only 117 are obtainable.</p>
     <p>Master 60 Sprites for a reward. A variant costs 2,700 Sprite Dust.</p>
     <p>Extract 500 Sprites and 750 Sprites for the final rewards.</p>
   `);

@@ -18,7 +18,7 @@ import { isValidCode } from '../public/lib/vault.js';
 
 export { VaultObject } from './vault-object.js';
 
-/** Generous for a 111-entry doc (~20 KB) but small enough to bound memory. */
+/** Generous for a 118-entry doc (~21 KB) but small enough to bound memory. */
 const MAX_BODY_BYTES = 512 * 1024;
 
 function json(status, payload) {

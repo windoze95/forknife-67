@@ -36,7 +36,7 @@ const PORT = Number(process.env.PORT) || 8080;
 const HOST = process.env.HOST || '0.0.0.0';
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, 'data');
 
-/** Generous for a 111-entry doc (~20 KB) but small enough to bound memory. */
+/** Generous for a 118-entry doc (~21 KB) but small enough to bound memory. */
 const MAX_BODY_BYTES = 512 * 1024;
 
 /** Per-IP write budget. A human syncing two devices never approaches this. */

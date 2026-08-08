@@ -8,7 +8,7 @@
  * The supply llama is a piñata: pastel tissue paper in harlequin bands, a hot
  * magenta mane, thick friendly shapes. The chrome takes all of that.
  *
- * The four status colours deliberately do NOT go pastel. This is a grid of 111
+ * The four status colours deliberately do NOT go pastel. This is a grid of 117
  * tiles you scan mid-match to answer one question, and pastels sit at almost
  * the same lightness as each other — owned, maxed and hunting would blur into
  * one another exactly when you need to tell them apart. So the paper is soft
@@ -184,7 +184,7 @@ svg { width: 1em; height: 1em; display: block; }
 
 /**
  * Deliberately NOT sticky. The progress summary is something you glance at,
- * not something you need while scanning 111 tiles — pinning it would cost a
+ * not something you need while scanning 117 tiles — pinning it would cost a
  * third of a phone screen. The toolbar below is what stays pinned.
  */
 .topbar {

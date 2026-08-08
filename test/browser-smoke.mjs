@@ -17,6 +17,10 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
+// Read for one reason: whether the coming-back section has anything to say
+// today. See `skip`.
+import { VAULTED_ENTRIES } from '../public/lib/catalog.js';
+
 // Resolve playwright from node_modules by default; PLAYWRIGHT_MODULE lets a
 // machine with only a global install point at it instead.
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
@@ -24,6 +28,7 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const SHOT_DIR = process.env.SHOT_DIR || path.join(os.tmpdir(), 'forknife-shots');
 
 let passed = 0;
+let skipped = 0;
 const failures = [];
 
 async function check(name, fn) {
@@ -35,6 +40,20 @@ async function check(name, fn) {
     failures.push({ name, err });
     console.log(`FAIL  ${name}\n      ${err.message}`);
   }
+}
+
+/**
+ * A check with nothing to run against in today's catalog.
+ *
+ * The coming-back section only exists while something is vaulted, and the
+ * 6 August Gem release emptied the vault. Deleting the check would leave the
+ * feature with no cover at all and nobody would notice; this way it announces
+ * itself every run and switches back on by itself the next time Epic pulls
+ * something back.
+ */
+function skip(name, why) {
+  skipped += 1;
+  console.log(`skip  ${name} — ${why}`);
 }
 
 function assert(condition, message) {
@@ -153,35 +172,27 @@ await page.goto(base);
 await page.waitForSelector('.tile');
 
 await check('renders the released catalog, grouped by sprite', async () => {
-  // 109 obtainable plus the two vaulted ones, which are drawn but not counted.
-  equal(await page.locator('.tile').count(), 111, 'entry count');
+  // 117 obtainable, and nothing vaulted to draw alongside them since the
+  // 6 August Gem release. Only Gem Punk is held back.
+  equal(await page.locator('.tile').count(), 117, 'entry count');
   equal(await page.locator('.group').count(), 25, 'base sprites');
 });
 
-await check('sprites due back are called out, without inflating the total', async () => {
-  // Knowing Ironmouse lands on the 4th is a thing you open the app to check.
-  const items = await page.locator('.soon-item').evaluateAll((els) =>
-    els.map((el) => ({
-      id: el.dataset.id,
-      name: el.querySelector('.soon-name').textContent,
-      when: el.querySelector('.soon-when').textContent,
-    })),
-  );
+await check('the coming-back section takes itself away once nothing is due back', async () => {
+  // It announced "Ironmouse, 4 August" until the 6 August release emptied the
+  // vault. With nothing waiting it has to disappear rather than sit above the
+  // grid as an empty heading — the section is meant to clean itself up.
+  assert(await page.locator('#comingSoon').isHidden(), 'nothing is due back');
+  equal(await page.locator('.soon-item').count(), 0);
 
-  equal(items.length, 2, 'two sprites are vaulted right now');
-  const ironmouse = items.find((item) => item.id === 'ironmouse');
-  assert(ironmouse, 'Ironmouse should be listed');
-  // Formatted in the viewer's locale, so assert the parts rather than an order.
-  assert(/4/.test(ironmouse.when) && /Aug/i.test(ironmouse.when), `got ${ironmouse.when}`);
-  equal(items.find((item) => item.id === 'grim.gem').when, 'No date yet');
-
-  // Visible in the grid, but never part of what you are counting down.
-  equal(await tile(page, 'ironmouse').count(), 1, 'drawn in the grid too');
-  equal(await page.locator('#progressCount').textContent(), '0 / 109', 'and not in the total');
+  // And the sprite it used to announce is now an ordinary countable entry.
+  equal(await tile(page, 'ironmouse').count(), 1, 'still drawn');
+  equal(await tile(page, 'ironmouse').getAttribute('data-state'), 'live');
+  equal(await page.locator('#progressCount').textContent(), '0 / 117', 'and in the total now');
 });
 
-await check('starts at 0 / 109 collected', async () => {
-  equal(await page.locator('#progressCount').textContent(), '0 / 109');
+await check('starts at 0 / 117 collected', async () => {
+  equal(await page.locator('#progressCount').textContent(), '0 / 117');
   equal(await page.locator('#progressPct').textContent(), '0%');
 });
 
@@ -191,7 +202,7 @@ await check('a group heading names the sprite, its rarity and its power', async 
   equal(await water.locator('.rarity').textContent(), 'Rare');
   // innerText, not textContent: the counter also holds the mastery crown, which
   // is display:none until something in the group is crowned.
-  equal(await water.locator('.group-count').innerText(), '0 / 6');
+  equal(await water.locator('.group-count').innerText(), '0 / 7');
   equal(
     await water.locator('.group-power').textContent(),
     'Replenish shields while standing in water!',
@@ -255,7 +266,7 @@ await check('every tile carries the sprite artwork', async () => {
   }));
 
   equal(shape.src, '/sprites/water.gold.webp');
-  equal(shape.loading, 'lazy', '109 eager images would be 109 requests on load');
+  equal(shape.loading, 'lazy', '117 eager images would be 117 requests on load');
   equal(shape.alt, '', 'the name is already on the tile, so the image is decorative');
 
   // A broken path renders an empty box, which the src assertion above would
@@ -295,14 +306,14 @@ await check('progress counts owned and maxed separately', async () => {
   await tile(page, 'earth').click();
   await tile(page, 'earth').click(); // maxed
 
-  equal(await page.locator('#progressCount').textContent(), '2 / 109');
+  equal(await page.locator('#progressCount').textContent(), '2 / 117');
   equal(await page.locator('#legendOwned').textContent(), '1');
   equal(await page.locator('#legendMaxed').textContent(), '1');
-  equal(await page.locator('#legendNeeded').textContent(), '107');
+  equal(await page.locator('#legendNeeded').textContent(), '115');
 });
 
 await check('a group heading tracks its own sprite', async () => {
-  equal(await group(page, 'water').locator('.group-count').innerText(), '1 / 6');
+  equal(await group(page, 'water').locator('.group-count').innerText(), '1 / 7');
   equal(await group(page, 'fire').locator('.group-count').innerText(), '0 / 7');
 });
 
@@ -314,7 +325,7 @@ await check('collecting climbs the counter; mastering marks it', async () => {
   equal(water.left, water.green, 'the half that moved is the half that colours');
   equal(water.right, water.muted, 'a total is not an achievement');
   equal(water.crowned, false);
-  equal(water.label, '1 of 6 collected');
+  equal(water.label, '1 of 7 collected');
 
   const earth = await counterInk(page, 'earth');
   equal(
@@ -494,7 +505,7 @@ await check('filters narrow the grid', async () => {
   equal(await page.locator('.tile').count(), 2, 'owned filter');
 
   await page.locator('.chip[data-filter="all"]').click();
-  equal(await page.locator('.tile').count(), 111, 'back to all');
+  equal(await page.locator('.tile').count(), 117, 'back to all');
 });
 
 await check('search finds an entry by the name the game gives it', async () => {
@@ -502,7 +513,7 @@ await check('search finds an entry by the name the game gives it', async () => {
   equal(await tileIds(page), ['water.gold']);
 
   await page.locator('#searchClear').click();
-  equal(await page.locator('.tile').count(), 111, 'cleared');
+  equal(await page.locator('.tile').count(), 117, 'cleared');
 });
 
 await check("search also accepts Epic's patch-note spelling", async () => {
@@ -568,7 +579,7 @@ await check('state survives a reload', async () => {
   await page.reload();
   await page.waitForSelector('.tile');
 
-  equal(await page.locator('#progressCount').textContent(), '3 / 109');
+  equal(await page.locator('#progressCount').textContent(), '3 / 117');
   equal(await tile(page, 'earth').getAttribute('data-status'), 'maxed');
 });
 
@@ -581,7 +592,7 @@ await check('a sprite Epic ships early can be added by hand', async () => {
   await page.locator('#addCustom').click();
   await page.keyboard.press('Escape');
 
-  equal(await page.locator('#progressCount').textContent(), '3 / 110');
+  equal(await page.locator('#progressCount').textContent(), '3 / 118');
   equal(await page.locator('.group').last().locator('.group-name').textContent(), 'Your own entries');
   equal(await tile(page, 'custom.1').locator('.tile-label').textContent(), 'Brand New Sprite');
 
@@ -597,8 +608,9 @@ const toggleSwitch = (target, id) => target.locator(`label.switch:has(#${id})`).
 await check('never-released entries stay hidden until you ask for them', async () => {
   // Vaulted is not the same as never released: one is coming back on a date,
   // the other has never existed for players, and only the second is hidden.
-  equal(await tile(page, 'ironmouse').count(), 1, 'vaulted, so shown');
-  equal(await tile(page, 'water.gem').count(), 0, 'never shipped, so hidden');
+  // Nothing is vaulted since 6 August, so Gem Punk is the whole hidden set.
+  equal(await tile(page, 'water.gem').count(), 1, 'shipped 6 August, so shown');
+  equal(await tile(page, 'punk.gem').count(), 0, 'never shipped, so hidden');
 
   await page.locator('#menuBtn').click();
   await page.waitForSelector('#menu[open]');
@@ -606,16 +618,16 @@ await check('never-released entries stay hidden until you ask for them', async (
   await page.keyboard.press('Escape');
 
   equal(await page.locator('#progressCount').textContent(), '3 / 119');
-  equal(await tile(page, 'water.gem').count(), 1, 'now showing');
-  equal(await tile(page, 'ironmouse').getAttribute('data-state'), 'vaulted');
-  equal(await tile(page, 'water.gem').getAttribute('data-state'), 'datamined');
+  equal(await tile(page, 'punk.gem').count(), 1, 'now showing');
+  equal(await tile(page, 'punk.gem').getAttribute('data-state'), 'datamined');
+  equal(await tile(page, 'water.gem').getAttribute('data-state'), 'live');
   equal(await tile(page, 'water').getAttribute('data-state'), 'live');
 
-  await tile(page, 'ironmouse').click({ delay: 700 });
+  await tile(page, 'punk.gem').click({ delay: 700 });
   await page.waitForSelector('#detail[open]');
   assert(
-    (await page.locator('#detailState').textContent()).startsWith('Vaulted'),
-    'a vaulted sprite has to say when it comes back',
+    (await page.locator('#detailState').textContent()).startsWith('Never released'),
+    'a sprite that has never shipped has to say so',
   );
   await page.keyboard.press('Escape');
   await page.waitForSelector('#detail[open]', { state: 'detached' }).catch(() => {});
@@ -624,7 +636,7 @@ await check('never-released entries stay hidden until you ask for them', async (
   await page.waitForSelector('#menu[open]');
   await toggleSwitch(page, 'unreleasedToggle');
   await page.keyboard.press('Escape');
-  equal(await page.locator('#progressCount').textContent(), '3 / 110');
+  equal(await page.locator('#progressCount').textContent(), '3 / 118');
 });
 
 /* ------------------------------ install --------------------------------- */
@@ -706,7 +718,7 @@ await check('the installed copy is not asked to install itself', async () => {
   await installed.close();
 });
 
-await check('the coming-back list can be waved away, until the news changes', async () => {
+const comingBackDismissal = async () => {
   // Its own context: dismissing it here would take it out of every check and
   // screenshot that follows.
   const reader = await newPage();
@@ -732,7 +744,14 @@ await check('the coming-back list can be waved away, until the news changes', as
   assert(await reader.locator('#comingSoon').isVisible(), 'new news has to get through');
 
   await reader.context().close();
-});
+};
+
+const DISMISSAL = 'the coming-back list can be waved away, until the news changes';
+if (VAULTED_ENTRIES.length) {
+  await check(DISMISSAL, comingBackDismissal);
+} else {
+  skip(DISMISSAL, 'nothing is vaulted, so the section never renders');
+}
 
 await check('a first run takes the palette from the device, not a fixed default', async () => {
   const night = await newPage({ colorScheme: 'dark' });
@@ -815,14 +834,14 @@ const second = await newPage({ mobile: false });
 await check('a second device connecting with the code pulls the collection', async () => {
   await second.goto(base);
   await second.waitForSelector('.tile');
-  equal(await second.locator('#progressCount').textContent(), '0 / 109', 'starts empty');
+  equal(await second.locator('#progressCount').textContent(), '0 / 117', 'starts empty');
 
   await second.locator('#menuBtn').click();
   await second.waitForSelector('#menu[open]');
   await second.locator('#codeInput').fill(vaultCode);
   await second.locator('#codeConnect').click();
 
-  await second.waitForFunction(() => document.getElementById('progressCount').textContent === '3 / 110', null, {
+  await second.waitForFunction(() => document.getElementById('progressCount').textContent === '3 / 118', null, {
     timeout: 8000,
   });
 
@@ -847,7 +866,7 @@ await check('an edit on device two reaches device one', async () => {
   await syncDevice(page);
 
   equal(await tile(page, 'ghost').getAttribute('data-status'), 'owned');
-  equal(await page.locator('#progressCount').textContent(), '4 / 110');
+  equal(await page.locator('#progressCount').textContent(), '4 / 118');
 });
 
 await check('simultaneous edits on different sprites both survive', async () => {
@@ -860,8 +879,8 @@ await check('simultaneous edits on different sprites both survive', async () => 
 
   equal(await tile(page, 'king').getAttribute('data-status'), 'owned', 'own edit kept');
   equal(await tile(page, 'striker').getAttribute('data-status'), 'owned', 'other device edit received');
-  equal(await page.locator('#progressCount').textContent(), '6 / 110', 'device one');
-  equal(await second.locator('#progressCount').textContent(), '6 / 110', 'device two');
+  equal(await page.locator('#progressCount').textContent(), '6 / 118', 'device one');
+  equal(await second.locator('#progressCount').textContent(), '6 / 118', 'device two');
 });
 
 await check('a queued sync is never silently dropped', async () => {
@@ -967,6 +986,8 @@ await browser.close();
 if (server) await new Promise((resolve) => server.close(resolve));
 if (dataDir) await fs.rm(dataDir, { recursive: true, force: true });
 
-console.log(`\n${passed} passed, ${failures.length} failed`);
+console.log(
+  `\n${passed} passed, ${failures.length} failed${skipped ? `, ${skipped} skipped` : ''}`,
+);
 console.log(`screenshots: ${SHOT_DIR}`);
 process.exit(failures.length ? 1 : 0);

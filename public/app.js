@@ -311,7 +311,7 @@ function tileFor(id) {
   const art = document.createElement('img');
   art.className = 'tile-img';
   art.alt = '';
-  // 109 tiles is 109 requests if they all load at once; only what is on screen
+  // 117 tiles is 117 requests if they all load at once; only what is on screen
   // matters, and the rest arrive as you scroll.
   art.loading = 'lazy';
   art.decoding = 'async';
@@ -1409,9 +1409,34 @@ $('searchClear').hidden = !ui.query;
 $('version').textContent = `forknife 67 · v${APP_VERSION} · catalog ${CATALOG_PATCH}`;
 $('catalogSize').textContent = String(RELEASED_ENTRIES.length);
 $('catalogUnreleased').textContent = String(ALL_ENTRIES.length - RELEASED_ENTRIES.length);
-$('catalogVaulted').textContent = String(ALL_ENTRIES.filter((e) => e.state === 'vaulted').length);
-$('catalogDatamined').textContent = String(ALL_ENTRIES.filter((e) => e.state === 'datamined').length);
 $('catalogPatch').textContent = CATALOG_PATCH;
+
+{
+  const countState = (state) => ALL_ENTRIES.filter((entry) => entry.state === state).length;
+  const vaulted = countState('vaulted');
+  const datamined = countState('datamined');
+
+  // Written rather than spelled out in the HTML because either number can be
+  // zero — after the 6 August Gem release nothing is vaulted at all — and
+  // "0 vaulted, and they come back" is a sentence about nothing.
+  const lines = [];
+  if (vaulted) {
+    lines.push(`${vaulted} ${vaulted === 1 ? 'is' : 'are'} vaulted — shipped, pulled, and due back.`);
+  }
+  if (datamined) {
+    lines.push(
+      `${datamined} ${datamined === 1 ? 'is' : 'are'} in the game files but ` +
+        `${datamined === 1 ? 'has' : 'have'} never been released.`,
+    );
+  }
+  if (lines.length) lines.push('Off by default so your total means what you think it means.');
+
+  $('catalogBreakdown').textContent = lines.join(' ');
+  $('catalogTotals').textContent =
+    `This is why published counts disagree: trackers say ${RELEASED_ENTRIES.length}, ` +
+    `because that is what you can actually go and get, and the game files say ` +
+    `${ALL_ENTRIES.length} because they count everything.`;
+}
 
 renderAll();
 renderSyncUi();
