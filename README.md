@@ -14,7 +14,7 @@ phone and your PC.
 
 ## What it does
 
-- **All 117 sprites and variants**, named and pictured, grouped by base sprite,
+- **61 current-season sprites and variants, plus the 117-entry Runners collection**, named and pictured, grouped by base sprite,
   with each sprite's power, rarity and where it spawns
 - **Three states**, cycled with a single tap:
   - **Needed** — not in your collection
@@ -41,77 +41,64 @@ never found. Mark a sprite the moment you extract it and the guessing stops.
 
 ## Where the sprite data comes from
 
-`public/lib/catalog.js` holds 25 base sprites and 118 entries, 117 of them
-obtainable. Names, rarities, power text, level scaling, spawn locations, drop
-rates and dust costs are read out of the game files; Epic's patch notes and
-IGN's checklist are the second sources.
+`public/lib/catalog.js` contains **61 released Override entries across 16 families**,
+plus **117 released Runners entries across 25 families** and the unreleased Gem
+Punk. Verified against [Fortnite.GG's current-season roster](https://fortnite.gg/sprites)
+on **10 September 2026, v42.10**, including that day's 14 Loot Hacker variants.
+Crown's Loot Hacker was already available; Mega Man has only its base form.
 
-### Why the published totals disagree
+The app opens on **C7 S4 · Override**. Use the **Season** selector to view
+**C7 S3 · Runners** or **All seasons**. As explained in
+[Epic's Override announcement](https://www.fortnite.com/news/fortnite-override-break-the-rules-change-the-game),
+the previous collection lives on in Sprite Garden. Existing IDs, notes, ownership,
+mastery and cloud sync records stay intact. The selector only changes what is
+shown and counted; it never deletes progress. Custom entries remain available
+in every view.
 
-You will see 117 and 118 quoted for the same season. Both are right, about
-different things:
-
-| Count | What it is |
-| ----- | ---------- |
-| **117** | Obtainable right now. What the app tracks, and what every source agrees on. |
-| **118** | The game files — the 117 plus one variant that has never been released. |
-
-So the app keeps three states rather than a released flag. On 6 August the Gem
-variants shipped in a batch: six that had only ever been in the files, plus Gem
-Grim, which went live on 30 July with Ironmouse and was pulled a day later for
-going out early. Ironmouse itself came back on 4 August. That empties the vault
-and leaves Punk's Gem as the only entry you cannot get — its art is in the game
-files, but no source lists it as obtainable. Turn on **Menu → Catalog** to see
-it; the totals stay honest either way.
-
-IGN also counts "20 base Sprites", which is the 20 that have variant families —
-the five collab Mythics (Burnt Peanut, Vini Jr., Pollo, John Wick, Ironmouse)
-have none. 20 + 5 = the same 25 the game files list.
-
-### Names
-
-The game files and the patch notes disagree on four — the game says *Grim*,
-*Llama*, *Peely* and *Burnt Peanut* where the patch notes say *Grim Reaper*,
-*Lootin' Llama*, *Peeky Peely* and *TheBurntPeanut*. The game's spelling is what
-the app shows, and both are searchable, so it does not matter which one you
-know.
-
-Popular fan checklists get several of these names wrong, disagree with each
-other on the total (91, 109, 111 and 117 have all been in circulation for this
-season) and misreport what
-the variants do. Two of `test/catalog.test.js`'s assertions exist to stop those
-numbers drifting back in.
-
-Epic ships sprites faster than this app redeploys, so **Menu → Add your own**
-tracks one the day it lands, and entry ids are derived from a stable key rather
-than a position — adding a sprite to the catalog can never scramble a
-collection anyone has already recorded.
+Names, rarity, abilities and artwork follow the game-file mirror. Search also
+accepts alternate spellings such as Grim Reaper, Lootin' Llama, Cheat Master
+X-Ray and Loot Hacker Bush. Override detail pages currently show placeholder
+zeroes for costs and chest odds: the app shows unknown values instead of
+borrowing Runners' summon costs or claiming free summons.
 
 ### Keeping it current
 
-`.github/workflows/catalog-drift.yml` runs `tools/check-catalog-drift.js` daily.
-It reads IGN's checklist, resolves every sprite name it finds against the
-catalog, compares the totals, and files one issue when something doesn't line
-up. `test/drift.test.js` pins it at both ends — it has to catch a new sprite
-*and* a new variant of an existing one, and it must not fire on prose like
-"Master Sprites", on a Mastery reward that happens to mention a number, or on a
-batch announcement like "8 Gem Sprites were added!", which names a variant and
-not a sprite. That last one is why variant labels are excluded by their own
-rule rather than added to the stopword list: stopwords get peeled off the front
-of a name before matching, and peeling "Holofoil" would let a genuinely new
-Holofoil Duck resolve on the strength of "Duck".
+The previous daily job checked only an outdated IGN page. A matching old page,
+an empty parse, or unavailable sources could all produce a green run. The new
+`.github/workflows/catalog-drift.yml` checks two kinds of evidence:
 
-**It detects; it never edits.** The catalog ships inside the app so the app
-works with no signal — that is the whole point of a tracker you use mid-match
-on mobile data — and a scraper writing to it unreviewed would publish whatever
-a wiki edit or a changed page layout produced, to someone with no way to notice
-it was wrong. Filling in a newly spotted sprite is a hand step, and needs a real
-browser: fortnite.gg refuses plain fetches *and* headless ones (403 both ways).
+- The current game build from [Fortnite-API](https://fortnite-api.com/v2/aes),
+  independently of any checklist. A new patch requires catalog review.
+- The [current-season roster](https://spritechecklist.org/sprites/) and every
+  family's variant table, including upcoming rows. Names with digits, hyphens,
+  and multiword variant labels are preserved. Declared family/release counts
+  must reconcile, and all current catalog entries must be covered.
 
-Artwork is Epic's, re-hosted by fortnite.gg, fetched by
-`tools/fetch-sprite-art.js` and committed under `public/sprites/`. The 512px
-originals would be 3.2 MB; resized to 96px the whole set is 232 KB. Fan projects
-may use Epic's assets non-commercially under the Fan Content Policy.
+A missing, blocked, empty or partially parsed source fails the job and updates
+one `catalog-drift` issue. A new patch, season, name or release also requires
+review. Reports are saved as workflow artifacts and in the run summary; repeat
+runs update the issue instead of adding daily comments. Run locally with:
+
+```bash
+node tools/check-catalog-drift.js
+node tools/check-catalog-drift.js --json
+```
+
+Both formats exit **0** when checked, **1** when review is needed, or **2** when
+coverage is incomplete. Same-patch hotfix detection still depends on community
+updates, so verification older than **14 days** also requires review. The
+checker never publishes source data automatically or changes release states
+based on a lagging checklist.
+
+To update: verify the live roster, edit the catalog and artwork mapping, run
+`node tools/fetch-sprite-art.js`, refresh the verified patch/date and pinned
+counts, bump the app/service-worker version, and run unit, Worker and browser
+checks. Regression fixtures preserve the actual 10 September index and variant
+table markup, including the source's lagging "Upcoming" labels for Loot Hackers.
+
+Artwork is Epic's, mirrored by Fortnite.GG and committed under `public/sprites/`.
+All **179** images are resized to 96px and total about **372 KB**. The catalog
+and artwork ship with the app so they do not depend on live third-party fetches.
 
 ## Running it locally
 
@@ -119,7 +106,7 @@ Node 22+. The app itself has no runtime dependencies.
 
 ```bash
 npm start           # http://localhost:8080 — plain Node, nothing to install
-npm test            # 84 unit, catalog, drift + API tests
+npm test            # unit, catalog, drift + API tests
 npm run icons       # regenerate the PWA icons
 ```
 

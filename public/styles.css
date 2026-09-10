@@ -381,6 +381,21 @@ svg { width: 1em; height: 1em; display: block; }
 /* Above its own box — see the band's own comment for what that buys. */
 .toolbar::before { inset: calc(var(--band) * -1) 0 auto; }
 
+.season-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.season-picker label, .group-season { color: var(--muted); font-size: 12px; }
+.season-picker select {
+  min-height: 40px;
+  min-width: 0;
+  flex: 1;
+  padding: 6px 10px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+.season-note { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+
 .search { position: relative; display: flex; align-items: center; }
 
 .search-icon {

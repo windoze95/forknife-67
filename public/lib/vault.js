@@ -317,12 +317,12 @@ export function nextCustomId(doc) {
  * counted, because a total that moves without any visible rows is worse than a
  * total that is briefly a few short.
  */
-export function activeIds(doc) {
-  return [...entriesFor(doc.unreleased).map((entry) => entry.id), ...customIds(doc)];
+export function activeIds(doc, season = 'all') {
+  return [...entriesFor(doc.unreleased, season).map((entry) => entry.id), ...customIds(doc)];
 }
 
-export function countsFor(doc) {
-  const ids = activeIds(doc);
+export function countsFor(doc, season = 'all') {
+  const ids = activeIds(doc, season);
   const scope = new Set(ids);
 
   let owned = 0;

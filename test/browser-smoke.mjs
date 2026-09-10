@@ -171,6 +171,59 @@ const page = await newPage();
 await page.goto(base);
 await page.waitForSelector('.tile');
 
+await check('defaults to all 61 Override entries including today’s Loot Hackers', async () => {
+  equal(await page.locator('#season').inputValue(), 'override');
+  equal(await page.locator('.tile').count(), 61);
+  equal(await page.locator('.group').count(), 16);
+  equal(await page.locator('#progressCount').textContent(), '0 / 61');
+  equal(await page.locator('.tile[data-variant="loothacker"]').count(), 15);
+  await page.locator('#search').fill('X-Ray');
+  equal(await tileIds(page), ['xray', 'xray.gold', 'xray.cheatmaster', 'xray.loothacker']);
+  await page.locator('#searchClear').click();
+  await tile(page, 'jonesy.loothacker').click({ delay: 700 });
+  await page.waitForSelector('#detail[open]');
+  equal(await page.locator('#detailTitle').textContent(), 'Loot Hacker Jonesy Sprite');
+  equal(await page.locator('#factDust').textContent(), 'Not published');
+  equal(await page.locator('#factDrop').textContent(), '—');
+  assert((await page.locator('#factPerk').textContent()).includes('Loot Hacks'), 'variant bonus shown');
+  await page.keyboard.press('Escape');
+  await page.screenshot({ path: path.join(SHOT_DIR, '00-override-mobile.png') });
+});
+
+await check('upgrading preserves old progress and keeps season totals independent', async () => {
+  const legacy = await newPage();
+  await legacy.goto(base);
+  await legacy.evaluate(() => {
+    localStorage.setItem('forknife67.doc.v1', JSON.stringify({ schema: 2, sprites: {
+      'water.gold': { id: 'water.gold', status: 'maxed', notes: 'from Runners', updatedAt: Date.now() },
+    } }));
+    localStorage.removeItem('forknife67.ui.v1');
+  });
+  await legacy.reload();
+  await legacy.waitForSelector('.tile');
+  equal(await legacy.locator('#progressCount').textContent(), '0 / 61');
+  await tile(legacy, 'jonesy.loothacker').click();
+  equal(await legacy.locator('#progressCount').textContent(), '1 / 61');
+  await legacy.locator('#season').selectOption('runners');
+  equal(await legacy.locator('#progressCount').textContent(), '1 / 117');
+  equal(await tile(legacy, 'water.gold').getAttribute('data-status'), 'maxed');
+  assert((await legacy.locator('#seasonNote').textContent()).includes('Sprite Garden'), 'old collection explained');
+  await legacy.reload();
+  await legacy.waitForSelector('.tile');
+  equal(await legacy.locator('#season').inputValue(), 'runners', 'selection persists');
+  await legacy.locator('#season').selectOption('all');
+  equal(await legacy.locator('#progressCount').textContent(), '2 / 178');
+  equal(await legacy.locator('.tile').count(), 178);
+  equal(await legacy.evaluate(() => window.__forknife.getDoc().sprites['water.gold'].notes), 'from Runners');
+  await legacy.locator('#season').selectOption('override');
+  equal(await tile(legacy, 'jonesy.loothacker').getAttribute('data-status'), 'owned');
+  await legacy.context().close();
+});
+
+// Continue the existing interaction and sync suite against the saved Runners
+// collection, so upgrading cannot hide regressions behind the new season.
+await page.locator('#season').selectOption('runners');
+
 await check('renders the released catalog, grouped by sprite', async () => {
   // 117 obtainable, and nothing vaulted to draw alongside them since the
   // 6 August Gem release. Only Gem Punk is held back.
@@ -834,6 +887,7 @@ const second = await newPage({ mobile: false });
 await check('a second device connecting with the code pulls the collection', async () => {
   await second.goto(base);
   await second.waitForSelector('.tile');
+  await second.locator('#season').selectOption('runners');
   equal(await second.locator('#progressCount').textContent(), '0 / 117', 'starts empty');
 
   await second.locator('#menuBtn').click();

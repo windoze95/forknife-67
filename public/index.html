@@ -86,7 +86,7 @@
 
   <div class="progress">
     <div class="progress-head">
-      <strong id="progressCount">0 / 117</strong>
+      <strong id="progressCount">0 / 61</strong>
       <span class="progress-sub" id="progressSub">collected</span>
       <span class="spacer"></span>
       <span class="progress-pct" id="progressPct">0%</span>
@@ -106,7 +106,7 @@
         <i class="dot dot-hunting"></i><span id="legendHunting">0</span> hunting
       </button>
       <button type="button" class="legend-item" data-jump="needed">
-        <i class="dot dot-needed"></i><span id="legendNeeded">117</span> to find
+        <i class="dot dot-needed"></i><span id="legendNeeded">61</span> to find
       </button>
     </div>
   </div>
@@ -116,9 +116,18 @@
 <div id="stickySentinel" aria-hidden="true"></div>
 
 <div class="toolbar" id="toolbar">
+  <div class="season-picker">
+    <label for="season">Season</label>
+    <select id="season">
+      <option value="override">C7 S4 · Override</option>
+      <option value="runners">C7 S3 · Runners</option>
+      <option value="all">All seasons</option>
+    </select>
+  </div>
+  <p class="season-note" id="seasonNote" hidden></p>
   <div class="search">
     <svg class="search-icon" aria-hidden="true"><use href="#i-search"/></svg>
-    <input type="search" id="search" placeholder="Gold Water, Grim, swim speed…" autocomplete="off"
+    <input type="search" id="search" placeholder="X-Ray, Loot Hacker, sprint…" autocomplete="off"
            spellcheck="false" enterkeyhint="search" aria-label="Search sprites">
     <button type="button" class="search-clear" id="searchClear" hidden aria-label="Clear search">
       <svg aria-hidden="true"><use href="#i-close"/></svg>
@@ -274,8 +283,8 @@
     <section class="panel">
       <h3>Catalog</h3>
       <p class="muted">
-        <b><span id="catalogSize">117</span> sprites and variants</b>, read from the game files and
-        checked against Epic's <span id="catalogPatch">v41.30</span> notes.
+        <b><span id="catalogSize">178</span> sprites and variants across both seasons</b>, read from the game files and
+        verified for <span id="catalogPatch">v42.10</span>.
       </p>
       <label class="switch">
         <input type="checkbox" id="unreleasedToggle">

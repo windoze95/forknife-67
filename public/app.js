@@ -30,6 +30,8 @@ import {
 
 import {
   CATALOG_PATCH,
+  CURRENT_SEASON,
+  SEASONS,
   ALL_ENTRIES,
   RELEASED_ENTRIES,
   VAULTED_ENTRIES,
@@ -40,7 +42,7 @@ import {
   isCustomId,
 } from './lib/catalog.js';
 
-const APP_VERSION = '2.5.5';
+const APP_VERSION = '2.6.0';
 const DOC_KEY = 'forknife67.doc.v1';
 const UI_KEY = 'forknife67.ui.v1';
 
@@ -53,6 +55,7 @@ const $ = (id) => document.getElementById(id);
 let doc = emptyDoc();
 
 let ui = {
+  season: CURRENT_SEASON,
   filter: 'all',
   query: '',
   compact: false,
@@ -98,6 +101,7 @@ function loadLocal() {
   if (!STATUSES.includes(ui.filter) && !['all', 'hunting'].includes(ui.filter)) {
     ui.filter = 'all';
   }
+  if (ui.season !== 'all' && !SEASONS[ui.season]) ui.season = CURRENT_SEASON;
 
   migrateTheme();
 }
@@ -205,7 +209,7 @@ function applyUndo() {
  * actually ask standing over a chest.
  */
 function allGroups() {
-  const groups = groupsFor(doc.unreleased).map(({ sprite, entries }) => ({
+  const groups = groupsFor(doc.unreleased, ui.season).map(({ sprite, entries }) => ({
     key: sprite.key,
     sprite,
     entries,
@@ -441,6 +445,12 @@ function groupSection(group) {
     rarity.dataset.rarity = group.sprite.rarity;
     rarity.textContent = RARITY_LABEL[group.sprite.rarity];
     head.append(rarity);
+    if (ui.season === 'all') {
+      const season = document.createElement('span');
+      season.className = 'group-season';
+      season.textContent = SEASONS[group.sprite.season];
+      head.append(season);
+    }
   }
 
   const count = document.createElement('span');
@@ -486,7 +496,7 @@ function renderGrid() {
   grid.replaceChildren(frag);
   $('empty').hidden = flatVisible.length > 0;
 
-  const counts = countsFor(doc);
+  const counts = countsFor(doc, ui.season);
   const filtered = ui.filter !== 'all' || ui.query.trim() !== '';
   $('resultLine').textContent = filtered
     ? `Showing ${flatVisible.length} of ${counts.total}`
@@ -494,7 +504,12 @@ function renderGrid() {
 }
 
 function renderProgress() {
-  const c = countsFor(doc);
+  const c = countsFor(doc, ui.season);
+  $('season').value = ui.season;
+  $('seasonNote').textContent = ui.season === 'runners'
+    ? 'Your Runners collection lives on in Sprite Garden.'
+    : ui.season === 'all' ? 'Both seasons, including your Runners collection in Sprite Garden.' : '';
+  $('seasonNote').hidden = ui.season === CURRENT_SEASON;
 
   $('progressCount').textContent = `${c.collected} / ${c.total}`;
   $('progressPct').textContent = `${c.percent}%`;
@@ -904,7 +919,7 @@ function renderDetail() {
     fact('factScaling', entry.scaling);
     fact('factWhere', entry.where);
     fact('factDrop', entry.released ? formatDrop(entry.drop) : '');
-    fact('factDust', `${entry.dust.toLocaleString('en-US')} Sprite Dust`);
+    fact('factDust', entry.dust === null ? 'Not published' : `${entry.dust.toLocaleString('en-US')} Sprite Dust`);
   }
 
   for (const opt of detailDialog.querySelectorAll('.status-opt')) {
@@ -1018,6 +1033,12 @@ function setFilter(filter) {
   renderChips();
   renderGrid();
 }
+
+$('season').addEventListener('change', (event) => {
+  ui.season = event.target.value;
+  saveUi();
+  renderAll();
+});
 
 for (const chip of document.querySelectorAll('.chip')) {
   chip.addEventListener('click', () => setFilter(chip.dataset.filter));
@@ -1433,9 +1454,9 @@ $('catalogPatch').textContent = CATALOG_PATCH;
 
   $('catalogBreakdown').textContent = lines.join(' ');
   $('catalogTotals').textContent =
-    `This is why published counts disagree: trackers say ${RELEASED_ENTRIES.length}, ` +
-    `because that is what you can actually go and get, and the game files say ` +
-    `${ALL_ENTRIES.length} because they count everything.`;
+    `${RELEASED_ENTRIES.filter((entry) => entry.season === CURRENT_SEASON).length} released entries in Override, ` +
+    `${RELEASED_ENTRIES.filter((entry) => entry.season === 'runners').length} in your Runners collection. ` +
+    'Switch seasons above the grid. Your progress is saved across both.';
 }
 
 renderAll();
@@ -1455,7 +1476,7 @@ if ('serviceWorker' in navigator) {
 // Exposed for the browser-driven smoke test in test/.
 window.__forknife = {
   getDoc: () => doc,
-  getCounts: () => countsFor(doc),
+  getCounts: () => countsFor(doc, ui.season),
   getVisible: () => [...flatVisible],
   isBlankSprite,
   // Resolves only once a sync that began after this call has finished, which
