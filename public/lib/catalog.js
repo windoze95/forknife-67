@@ -1,5 +1,5 @@
 /**
- * The sprite catalog — every collectible in Fortnite: Runners.
+ * The sprite catalog — Fortnite: Override and the Runners collection.
  *
  * Imported by the browser app AND the Node server, so keep it dependency free
  * and side-effect free, exactly like vault.js.
@@ -37,12 +37,15 @@
  * The patch this catalog was verified against, and the day it was checked.
  * Shown in the app.
  *
- * The 6 August Gem release came in as a hotfix — neither fortnite.gg nor
- * Epic's news feed put a version number on it — so the patch label stands
- * still while the verification date moves.
+ * Same-patch hotfixes move the verification date without changing the patch.
  */
-export const CATALOG_PATCH = 'v41.30';
-export const CATALOG_VERIFIED = '2026-08-08';
+export const CATALOG_PATCH = 'v42.10';
+export const CATALOG_VERIFIED = '2026-09-10';
+export const CURRENT_SEASON = 'override';
+export const SEASONS = {
+  override: 'C7 S4 · Override',
+  runners: 'C7 S3 · Runners',
+};
 
 export const RARITIES = ['rare', 'epic', 'legendary', 'mythic'];
 
@@ -57,7 +60,7 @@ export const RARITY_LABEL = {
  * Display order for variants, so the same variant sits in the same place in
  * every group and the grid can be scanned down a column.
  */
-export const VARIANT_ORDER = ['gold', 'gummy', 'galaxy', 'holofoil', 'cube', 'quack', 'gem'];
+export const VARIANT_ORDER = ['gold', 'cheatmaster', 'loothacker', 'gummy', 'galaxy', 'holofoil', 'cube', 'quack', 'gem'];
 
 /**
  * What each variant adds on top of the base sprite's power, verbatim from the
@@ -76,6 +79,8 @@ export const VARIANTS = {
   cube: { label: 'Cube', perk: '' },
   quack: { label: 'Quack', perk: '' },
   gem: { label: 'Gem', perk: 'Take 30% less Fall damage' },
+  cheatmaster: { label: 'Cheat Master', perk: 'All inputs are correct when entering Cheat Codes found in the world.' },
+  loothacker: { label: 'Loot Hacker', perk: 'Increases chances of spawning items from your Loot Hacks.' },
 };
 
 /**
@@ -95,7 +100,7 @@ export const VARIANT_DUST = { rare: 2700, epic: 4000, legendary: 6750, mythic: 1
  * strands whatever anyone had already recorded against it.
  */
 export const STATES = {
-  live: 'Obtainable now',
+  live: 'Released',
   vaulted: 'Vaulted',
   datamined: 'In the files, never released',
 };
@@ -108,7 +113,7 @@ export const STATES = {
  * `state` marks anything not currently obtainable, and `returns` an ISO date
  * where one is known. Both are hidden unless you turn them on in the menu.
  */
-export const SPRITES = [
+const RUNNERS_SPRITES = [
   /* ------------------------------- Rare -------------------------------- */
   {
     key: 'water',
@@ -520,6 +525,128 @@ export const SPRITES = [
   },
 ];
 
+/**
+ * Override's 16 families / 61 released entries, checked in fortnite.gg's
+ * current-season grid on 10 September, including the 14 Loot Hacker releases
+ * that morning (Crown's was already live). Mega Man has only its base form.
+ * https://fortnite.gg/sprites
+ * https://www.fortnite.com/news/fortnite-override-break-the-rules-change-the-game
+ *
+ * Detail pages currently publish zero placeholders for costs and chest odds.
+ * Keep those unknown; do not borrow Runners' prices or advertise free summons.
+ * The old season's IDs and progress remain available in its own collection.
+ */
+const OVERRIDE_SPRITES = [
+  {
+    key: 'jonesy', name: 'Jonesy Sprite', rarity: 'rare',
+    power: 'Recover health or shields shortly after taking damage.',
+    scaling: 'Recover more with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'adventure', name: 'Adventure Sprite', rarity: 'rare',
+    power: 'Upgrade a random item in your inventory with each level.',
+    scaling: '', where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'bush', name: 'Bush Sprite', aliases: ['Bushranger Sprite'], rarity: 'rare',
+    power: 'Periodically gain a bush disguise. At max level, eliminations also grant a bush.',
+    scaling: 'Less time between disguises with each level.', where: '',
+  },
+  {
+    key: 'sonic', name: 'Sonic Sprite', rarity: 'epic',
+    power: 'Sprint faster.', scaling: 'Sprint speed increases with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'tails', name: 'Tails Sprite', rarity: 'epic',
+    power: 'Press jump in the air to hover with Tails.',
+    scaling: 'Hover speed increases with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'shadow', name: 'Shadow Sprite', rarity: 'epic',
+    power: 'Automatically reload unequipped weapons over time. At max level, reload your equipped weapon too.',
+    scaling: 'Automatic reloads get faster with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'eightbit', name: '8-Bit Sprite', aliases: ['Eight Bit Sprite'], rarity: 'rare',
+    power: 'Find an 8-Bit Shotgun in your first chest and gain a score multiplier for it.',
+    scaling: '', where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'jackrabbit', name: 'Jackrabbit Sprite', rarity: 'legendary',
+    power: 'Press jump in the air to double jump.',
+    scaling: 'The cooldown between jumps decreases with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'crown', name: 'Crown Sprite', rarity: 'mythic',
+    power: 'Level up by winning matches. Crown Wins level it faster; mastering unlocks new variants.',
+    scaling: '', where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'killswitch', name: 'Killswitch Sprite', rarity: 'legendary',
+    power: 'Aim in the air to enter Hangtime with improved accuracy.',
+    scaling: 'Accuracy increases with each level.', where: 'Found in the world at nighttime',
+  },
+  {
+    key: 'klombo', name: 'Klombo Sprite', rarity: 'mythic',
+    power: 'Consume items to level up and receive random items at each level.',
+    scaling: 'Item quality increases with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'megaman', name: 'Mega Man Sprite', rarity: 'rare',
+    power: 'Slide with reduced friction.', scaling: 'Slide farther with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'overshield', name: 'Overshield Sprite', rarity: 'rare',
+    power: 'Gain overshield that scales with your level.', scaling: '',
+    where: 'Spotted near high and mountainous areas',
+  },
+  {
+    key: 'xray', name: 'X-Ray Sprite', rarity: 'legendary',
+    power: 'Periodically mark enemies around you.',
+    scaling: 'Mark more often and in a larger radius with each level.', where: '',
+  },
+  {
+    key: 'onigiri', name: 'Onigiri Sprite', rarity: 'rare',
+    power: 'Gain Overdrive after eating or drinking a consumable.',
+    scaling: 'Overdrive lasts longer with each level.', where: '',
+  },
+  {
+    key: 'stormscout', name: 'Storm Scout Sprite', rarity: 'rare',
+    power: 'Gain Overdrive after taking enough storm damage.',
+    scaling: 'Overdrive lasts longer with each level.',
+    where: 'Spotted near high and mountainous areas',
+  },
+].map((sprite) => ({
+  ...sprite,
+  season: 'override',
+  dust: null,
+  variantDust: null,
+  drop: null,
+  variants: sprite.key === 'megaman' ? [] : [
+    { v: 'gold', drop: null },
+    {
+      v: 'cheatmaster', drop: null,
+      ...(['xray', 'onigiri'].includes(sprite.key) ? { name: `Cheatmaster ${sprite.name}` } : {}),
+    },
+    {
+      v: 'loothacker', drop: null,
+      ...(sprite.key === 'bush' ? { name: 'Loot Hacker Bushranger Sprite' } : {}),
+    },
+  ],
+}));
+
+export const SPRITES = [
+  ...OVERRIDE_SPRITES,
+  ...RUNNERS_SPRITES.map((sprite) => ({ ...sprite, season: 'runners' })),
+];
+
 /* ---------------------------------------------------------------------- */
 /* Derived views                                                          */
 /* ---------------------------------------------------------------------- */
@@ -536,7 +663,7 @@ export function entryId(spriteKey, variant) {
   return variant && variant !== 'base' ? `${spriteKey}.${variant}` : spriteKey;
 }
 
-function buildEntry(sprite, variant, drop, state, returns) {
+function buildEntry(sprite, variant, drop, state, returns, options = {}) {
   const meta = VARIANTS[variant];
   return {
     state,
@@ -544,18 +671,20 @@ function buildEntry(sprite, variant, drop, state, returns) {
     returns: returns || '',
     id: entryId(sprite.key, variant),
     spriteKey: sprite.key,
+    season: sprite.season,
     sprite: sprite.name,
     variant,
     variantLabel: meta.label,
     // "Gold Water Sprite" — the name the game shows, which is what a player
     // types into the search box.
-    name: variant === 'base' ? sprite.name : `${meta.label} ${sprite.name}`,
+    name: options.name || (variant === 'base' ? sprite.name : `${meta.label} ${sprite.name}`),
     rarity: sprite.rarity,
     power: sprite.power,
     perk: meta.perk,
     scaling: sprite.scaling,
     where: sprite.where,
-    dust: variant === 'base' ? sprite.dust : VARIANT_DUST[sprite.rarity],
+    dust: variant === 'base' ? sprite.dust
+      : 'variantDust' in sprite ? sprite.variantDust : VARIANT_DUST[sprite.rarity],
     drop,
   };
 }
@@ -577,7 +706,7 @@ export const ALL_ENTRIES = SPRITES.flatMap((sprite) => {
   return [
     buildEntry(sprite, 'base', sprite.drop, spriteState, sprite.returns),
     ...orderedVariants(sprite).map((v) =>
-      buildEntry(sprite, v.v, v.drop, stateFor(v), returnsFor(v)),
+      buildEntry(sprite, v.v, v.drop, stateFor(v), returnsFor(v), v),
     ),
   ];
 });
@@ -586,21 +715,23 @@ export const ENTRY_BY_ID = new Map(ALL_ENTRIES.map((entry) => [entry.id, entry])
 
 export const SPRITE_BY_KEY = new Map(SPRITES.map((sprite) => [sprite.key, sprite]));
 
-/** Entries that are actually obtainable right now. */
+/** Released entries across both collections; scope by season in the UI. */
 export const RELEASED_ENTRIES = ALL_ENTRIES.filter((entry) => entry.released);
 
 /** Shipped once, pulled back, coming again — with a date where one is known. */
 export const VAULTED_ENTRIES = ALL_ENTRIES.filter((entry) => entry.state === 'vaulted');
 
 /**
- * What counts toward your total: only what you can actually go and get.
+ * What counts toward the selected collection: released entries by default.
+ * Runners is retained for Sprite Garden, not advertised as current BR loot.
  *
  * Kept separate from `visibleEntries` on purpose. A sprite you cannot obtain
  * must not sit in the denominator making the collection look further away than
  * it is.
  */
-export function entriesFor(includeHidden = false) {
-  return includeHidden ? ALL_ENTRIES : RELEASED_ENTRIES;
+export function entriesFor(includeHidden = false, season = 'all') {
+  return (includeHidden ? ALL_ENTRIES : RELEASED_ENTRIES)
+    .filter((entry) => season === 'all' || entry.season === season);
 }
 
 /**
@@ -608,8 +739,9 @@ export function entriesFor(includeHidden = false) {
  * return date is worth seeing greyed out and waiting for, and it turns into an
  * ordinary entry by itself the moment the catalog marks it live.
  */
-export function visibleEntries(includeHidden = false) {
-  return includeHidden ? ALL_ENTRIES : ALL_ENTRIES.filter((entry) => entry.state !== 'datamined');
+export function visibleEntries(includeHidden = false, season = 'all') {
+  return ALL_ENTRIES.filter((entry) =>
+    (includeHidden || entry.state !== 'datamined') && (season === 'all' || entry.season === season));
 }
 
 export function isCustomId(id) {
@@ -620,8 +752,8 @@ export function isCustomId(id) {
  * Entries grouped by base sprite, which is how the grid is laid out: one
  * heading per sprite, then its variants.
  */
-export function groupsFor(includeHidden = false) {
-  const visible = visibleEntries(includeHidden);
+export function groupsFor(includeHidden = false, season = 'all') {
+  const visible = visibleEntries(includeHidden, season);
   const groups = [];
 
   for (const sprite of SPRITES) {
@@ -645,7 +777,7 @@ const SEARCH_TEXT = new Map(
     );
     return [
       entry.id,
-      [entry.name, ...aliases, entry.rarity, entry.variantLabel, entry.power, entry.where]
+      [entry.name, `${entry.variantLabel} ${entry.sprite}`, ...aliases, entry.rarity, entry.variantLabel, entry.power, entry.where]
         .join(' ')
         .toLowerCase(),
     ];
@@ -684,6 +816,9 @@ export const NAME_INDEX = (() => {
 
   for (const entry of ALL_ENTRIES) {
     add(entry.name, entry.id);
+    // Accept the regular family spelling even when a variant's in-game name
+    // differs (Loot Hacker Bushranger / Loot Hacker Bush).
+    if (entry.variant !== 'base') add(`${entry.variantLabel} ${entry.sprite}`, entry.id);
 
     const sprite = SPRITE_BY_KEY.get(entry.spriteKey);
     for (const alias of sprite.aliases || []) {

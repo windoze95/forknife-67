@@ -20,29 +20,43 @@ import {
   entriesFor,
   visibleEntries,
   idForName,
+  searchTextFor,
   formatDrop,
 } from '../public/lib/catalog.js';
 
 import { isValidEntryId } from '../public/lib/vault.js';
 
-/**
- * The counts every other number in the app is derived from, taken from the
- * game files on 2026-08-08, after the 6 August Gem release moved eight entries
- * into reach. Both this app's first version and the tracker it was compared
- * against said 111, and both were wrong.
- *
- * When Epic ships more sprites, update these deliberately — a silent change
- * here is the app quietly lying about how far off completion you are.
- */
-const RELEASED = 117;
-const TOTAL = 118;
-const RELEASED_SPRITES = 25;
+// Verified 2026-09-10: 61 Override + 117 Runners released; Gem Punk hidden.
+const RELEASED = 178;
+const TOTAL = 179;
+const RELEASED_SPRITES = 41;
 
 test('the catalog holds the counts the game reports', () => {
   assert.equal(RELEASED_ENTRIES.length, RELEASED);
   assert.equal(ALL_ENTRIES.length, TOTAL);
-  assert.equal(SPRITES.length, 25);
+  assert.equal(SPRITES.length, 41);
   assert.equal(groupsFor(true).length, SPRITES.length);
+});
+
+test('Override and Runners remain separate collections with stable entry IDs', () => {
+  assert.equal(entriesFor(false, 'override').length, 61);
+  assert.equal(groupsFor(false, 'override').length, 16);
+  assert.equal(entriesFor(false, 'runners').length, 117);
+  assert.equal(groupsFor(false, 'runners').length, 25);
+  assert.deepEqual(entriesFor(true, 'runners').filter((e) => !e.released).map((e) => e.id), ['punk.gem']);
+  assert.equal(ENTRY_BY_ID.get('water.gold').season, 'runners');
+  assert.equal(ENTRY_BY_ID.get('jonesy.loothacker').season, 'override');
+  assert.equal(entriesFor(false, 'override').filter((e) => e.variant === 'loothacker').length, 15);
+  assert.deepEqual(groupsFor(false, 'override').find((g) => g.sprite.key === 'megaman').entries.map((e) => e.id), ['megaman']);
+});
+
+test('current game spellings and family aliases both resolve', () => {
+  assert.equal(idForName('Loot Hacker Bushranger Sprite'), 'bush.loothacker');
+  assert.equal(idForName('Loot Hacker Bush Sprite'), 'bush.loothacker');
+  assert.equal(idForName('Cheatmaster X-Ray Sprite'), 'xray.cheatmaster');
+  assert.equal(idForName('Cheat Master X-Ray Sprite'), 'xray.cheatmaster');
+  assert.equal(idForName('Gold 8-Bit Sprite'), 'eightbit.gold');
+  assert.ok(searchTextFor('xray.cheatmaster').includes('cheat master x-ray sprite'));
 });
 
 test('what counts and what is drawn are not the same set', () => {
@@ -63,7 +77,7 @@ test('what counts and what is drawn are not the same set', () => {
   );
   assert.equal(groupsFor(false).length, RELEASED_SPRITES);
 
-  // Gem Punk is the only thing either set leaves out of the full 118.
+  // Gem Punk is the only thing either set leaves out of the full catalog.
   const countable = new Set(entriesFor(false).map((entry) => entry.id));
   const drawn = new Set(visibleEntries(false).map((entry) => entry.id));
   const missing = (set) => ALL_ENTRIES.filter((entry) => !set.has(entry.id)).map((e) => e.id);
@@ -91,8 +105,8 @@ test('every sprite carries the fields the UI renders', () => {
     assert.match(sprite.name, /\S/, `${sprite.key} has no name`);
     assert.ok(RARITIES.includes(sprite.rarity), `${sprite.key} has rarity ${sprite.rarity}`);
     assert.match(sprite.power, /\S/, `${sprite.key} has no power text`);
-    assert.ok(Number.isFinite(sprite.dust) && sprite.dust > 0, `${sprite.key} has no summon cost`);
-    assert.ok(Number.isFinite(sprite.drop), `${sprite.key} has no drop rate`);
+    assert.ok((sprite.season === 'override' && sprite.dust === null) || (Number.isFinite(sprite.dust) && sprite.dust > 0), `${sprite.key} has no summon cost`);
+    assert.ok((sprite.season === 'override' && sprite.drop === null) || Number.isFinite(sprite.drop), `${sprite.key} has no drop rate`);
     assert.equal(typeof sprite.where, 'string');
   }
 });
@@ -149,7 +163,7 @@ test('a variant costs what its base sprite rarity says it costs', () => {
     if (entry.variant === 'base') continue;
     assert.equal(
       entry.dust,
-      VARIANT_DUST[entry.rarity],
+      entry.season === 'override' ? null : VARIANT_DUST[entry.rarity],
       `${entry.name} is priced off its rarity table`,
     );
   }
@@ -187,7 +201,7 @@ test('vaulted and never-released are tracked apart, and both totals reconcile', 
   assert.equal(count('live'), RELEASED, 'the number that actually matters');
   assert.equal(count('vaulted'), 0, '6 August emptied the vault');
   assert.equal(count('datamined'), 1);
-  assert.equal(count('live') + count('vaulted'), 117, 'what both trackers publish');
+  assert.equal(count('live') + count('vaulted'), RELEASED, 'what both trackers publish');
   assert.equal(ALL_ENTRIES.length, TOTAL, "the game files' total");
 });
 
